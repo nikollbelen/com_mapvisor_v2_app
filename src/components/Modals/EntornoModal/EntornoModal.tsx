@@ -1,0 +1,231 @@
+import { useState, useEffect } from 'react';
+import '../shared/HudPanelModal.css';
+import './EntornoModal.css';
+
+interface EntornoModalProps {
+  isVisible?: boolean;
+  onClose?: () => void;
+  entornoData?: any;
+  isMinimized?: boolean;
+  onMinimizedChange?: (minimized: boolean) => void;
+}
+
+const EntornoModal = ({
+  isVisible = false,
+  onClose,
+  entornoData,
+  isMinimized = false,
+  onMinimizedChange,
+}: EntornoModalProps) => {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsMobile(window.innerWidth <= 1024);
+    };
+
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
+
+  const defaultEntornoData = {
+    title: 'Ubicación',
+    tipo: 'Turismo',
+    imagen: '/images/club_house.jpg',
+    coordinates: 'Coordenadas no disponibles',
+  };
+
+  const data = entornoData
+    ? {
+        title: entornoData.title || 'Ubicación',
+        tipo: entornoData.tipo || 'Turismo',
+        imagen: entornoData.imagen || '/images/club_house.jpg',
+        coordinates: entornoData.coordinates || 'Coordenadas no disponibles',
+      }
+    : defaultEntornoData;
+
+  const [showTimeEstimate, setShowTimeEstimate] = useState(false);
+  const [timeEstimate, setTimeEstimate] = useState('');
+
+  useEffect(() => {
+    setShowTimeEstimate(false);
+    setTimeEstimate('');
+  }, [entornoData]);
+
+  useEffect(() => {
+    if (!isVisible) {
+      onMinimizedChange?.(false);
+    }
+  }, [isVisible, onMinimizedChange]);
+
+  const handleClose = () => {
+    onMinimizedChange?.(false);
+    onClose?.();
+  };
+
+  const handleMinimize = () => {
+    onMinimizedChange?.(true);
+  };
+
+  const parseLonLat = (coords: unknown): [number, number] | null => {
+    if (!coords || typeof coords === 'string' && coords.includes('no disponibles')) {
+      return null;
+    }
+    const values = Array.isArray(coords)
+      ? coords
+      : String(coords)
+          .split(',')
+          .map((coord) => parseFloat(coord.trim()));
+    if (values.length < 2 || values.some((value) => Number.isNaN(value))) {
+      return null;
+    }
+    return [values[0], values[1]];
+  };
+
+  const handleCalculateRoute = async () => {
+    setShowTimeEstimate(true);
+
+    const environmentLonLat = parseLonLat(data.coordinates);
+    const projectLonLat = window.getProjectMainMarkerLonLat?.() ?? null;
+
+    if (window.calculateRoute && environmentLonLat && projectLonLat) {
+      const token = import.meta.env.VITE_OPEN_ROUTE_SERVICE_KEY;
+
+      // Origen: marcador de entorno seleccionado → destino: marcador principal del proyecto
+      const result = await window.calculateRoute(
+        token,
+        environmentLonLat,
+        projectLonLat,
+        data.tipo
+      );
+
+      if (result?.success) {
+        setTimeEstimate(
+          `${result.duration} min (${Math.round(result.distance / 1000)} km)`
+        );
+      } else {
+        setTimeEstimate('Error al calcular la ruta');
+      }
+    } else {
+      setTimeEstimate('No se pudo obtener la ubicación de origen o destino');
+    }
+  };
+
+  const handleOpenGoogleMaps = () => {
+    if (!data.coordinates) return;
+
+    const coords = Array.isArray(data.coordinates)
+      ? data.coordinates
+      : data.coordinates
+          .split(',')
+          .map((coord: string) => parseFloat(coord.trim()))
+          .filter((value: number) => !Number.isNaN(value));
+
+    if (coords.length < 2) return;
+
+    const [longitude, latitude] = coords;
+    const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+    window.open(mapsUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  if (!isVisible) return null;
+
+  return (
+    <>
+      {!isMinimized && (
+        <div className="hud-panel-overlay show" id="aroundModalOverlay">
+          <div className="hud-panel-modal hud-glass-panel hud-gold-edge">
+            <div className="hud-panel-body">
+              <div className="hud-panel-actions">
+                {isMobile && (
+                  <button
+                    type="button"
+                    className="hud-panel-minimize"
+                    onClick={handleMinimize}
+                    title="Minimizar"
+                    aria-label="Minimizar"
+                  >
+                    <span className="material-symbols-outlined">expand_more</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="hud-panel-close"
+                  id="closeAroundModal"
+                  onClick={handleClose}
+                  title="Cerrar"
+                  aria-label="Cerrar"
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+
+              <div className="hud-panel-header">
+                <div className="hud-panel-logo-container">
+                  <img
+                    src={`/images/sidebar/entorno/iconos/${data.tipo.toLowerCase()}.svg`}
+                    alt={data.tipo}
+                    className="entorno-modal-logo-img"
+                  />
+                </div>
+              </div>
+
+              <h2 className="hud-panel-heading">{data.title}</h2>
+              <p className="hud-panel-subheading">{data.tipo}</p>
+
+              <div className="hud-panel-content entorno-modal-content">
+                <div
+                  className="entorno-card-image"
+                  style={{ backgroundImage: `url(${data.imagen})` }}
+                />
+
+                {showTimeEstimate && (
+                  <div className="entorno-time-estimate">
+                    <span className="material-symbols-outlined">directions_car</span>
+                    <span>{timeEstimate}</span>
+                  </div>
+                )}
+
+                <div className="entorno-location-block">
+                  <h3 className="entorno-location-label">Ubicación</h3>
+                  <p className="entorno-location-value">
+                    {Array.isArray(data.coordinates)
+                      ? `${data.coordinates[1].toFixed(6)}, ${data.coordinates[0].toFixed(6)}`
+                      : data.coordinates}
+                  </p>
+                </div>
+
+                <div className="entorno-actions-row">
+                  {!showTimeEstimate && (
+                    <button
+                      type="button"
+                      className="entorno-btn-primary"
+                      id="calculateRouteBtn"
+                      onClick={handleCalculateRoute}
+                    >
+                      <span className="material-symbols-outlined">route</span>
+                      Cómo llegar
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="entorno-btn-secondary"
+                    id="openGoogleMapsBtn"
+                    onClick={handleOpenGoogleMaps}
+                  >
+                    <span className="material-symbols-outlined">map</span>
+                    Maps
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+export default EntornoModal;

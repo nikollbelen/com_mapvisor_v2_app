@@ -1,0 +1,3177 @@
+import { useEffect, useMemo, useState, useRef } from "react";
+import {
+  addMonths,
+  format,
+  parse,
+  isValid,
+  // isBefore,
+  // startOfDay,
+} from "date-fns";
+import jsPDF from 'jspdf';
+import "./LotInfoModal.css";
+import ContactModal from "../ContactModal/ContactModal";
+import { useAuth } from "../../../contexts/AuthContext";
+import { getLotStatusBadgeStyle } from "../../../constants/lotStatusColors";
+
+interface LotInfoModalProps {
+  isVisible?: boolean;
+  onClose?: () => void;
+  loteData?: any;
+}
+
+const canUseDom = typeof window !== "undefined" && typeof document !== "undefined";
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+const escapeAttribute = (value: string) =>
+  escapeHtml(value.replace(/'/g, "&#39;"));
+
+const sanitizeNotesHtml = (input: string) => {
+  if (!input || typeof input !== "string") return "";
+  if (!canUseDom) return input;
+
+  const template = document.createElement("template");
+  template.innerHTML = input;
+
+  const sanitizeNode = (node: ChildNode): string => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return escapeHtml(node.textContent || "");
+    }
+
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const element = node as HTMLElement;
+      const tagName = element.tagName.toUpperCase();
+      const children = Array.from(element.childNodes)
+        .map(sanitizeNode)
+        .join("");
+
+      switch (tagName) {
+        case "P":
+        case "STRONG":
+        case "EM":
+        case "B":
+        case "I":
+        case "U":
+        case "A":
+        case "UL":
+        case "OL":
+        case "LI":
+        case "SPAN":
+        case "DIV":
+        case "BR":
+          break;
+        default:
+          return children;
+      }
+
+      if (tagName === "BR") {
+        return "<br />";
+      }
+
+      if (tagName === "A") {
+        const href = element.getAttribute("href") || "#";
+        const rel = element.getAttribute("rel") || "noopener noreferrer";
+        const target = element.getAttribute("target") || "_blank";
+        return `<a href="${escapeAttribute(href)}" rel="${escapeAttribute(
+          rel
+        )}" target="${escapeAttribute(target)}">${children}</a>`;
+      }
+
+      return `<${tagName.toLowerCase()}>${children}</${tagName.toLowerCase()}>`;
+    }
+
+    return "";
+  };
+
+  return Array.from(template.content.childNodes).map(sanitizeNode).join("").trim();
+};
+
+type NoteSegment = {
+  text?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  linkHref?: string;
+  isNewline?: boolean;
+};
+
+type NoteLine = {
+  runs: NoteSegment[];
+};
+
+const parseNotesHtmlToSegments = (html: string): NoteSegment[] => {
+  if (!html || !canUseDom) {
+    return html
+      ? [{ text: html.replace(/<[^>]+>/g, " "), bold: false, italic: false, underline: false }]
+      : [];
+  }
+
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const segments: NoteSegment[] = [];
+
+  const pushNewline = () => {
+    if (!segments.length || segments[segments.length - 1]?.isNewline) return;
+    segments.push({ isNewline: true });
+  };
+
+  const normalizeText = (text: string) => text.replace(/\s+/g, " ");
+
+  const traverse = (node: ChildNode, style: NoteSegment) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const textContent = normalizeText(node.textContent || "");
+      if (textContent.trim()) {
+        segments.push({
+          text: textContent,
+          bold: style.bold,
+          italic: style.italic,
+          underline: style.underline,
+          linkHref: style.linkHref,
+        });
+      }
+      return;
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const element = node as HTMLElement;
+    const tagName = element.tagName.toUpperCase();
+
+    if (tagName === "BR") {
+      segments.push({ isNewline: true });
+      return;
+    }
+
+    if (tagName === "UL" || tagName === "OL") {
+      const items = Array.from(element.children).filter(
+        (child) => child.tagName && child.tagName.toUpperCase() === "LI"
+      );
+      items.forEach((item, index) => {
+        const prefix = tagName === "OL" ? `${index + 1}. ` : "• ";
+        segments.push({
+          text: prefix,
+          bold: style.bold,
+          italic: style.italic,
+          underline: style.underline,
+          linkHref: style.linkHref,
+        });
+        Array.from(item.childNodes).forEach((child) =>
+          traverse(child, { ...style })
+        );
+        segments.push({ isNewline: true });
+      });
+      pushNewline();
+      return;
+    }
+
+    const nextStyle = { ...style };
+    if (tagName === "STRONG" || tagName === "B") nextStyle.bold = true;
+    if (tagName === "EM" || tagName === "I") nextStyle.italic = true;
+    if (tagName === "U") nextStyle.underline = true;
+    if (tagName === "A") {
+      nextStyle.underline = true;
+      nextStyle.linkHref = element.getAttribute("href") || undefined;
+    }
+
+    const blockLevel = ["P", "DIV", "LI"].includes(tagName);
+
+    Array.from(element.childNodes).forEach((child) => traverse(child, nextStyle));
+
+    if (blockLevel) {
+      pushNewline();
+    }
+  };
+
+  Array.from(template.content.childNodes).forEach((child) =>
+    traverse(child, {})
+  );
+
+  return segments;
+};
+
+const layoutNoteSegmentsForPdf = (
+  pdfInstance: jsPDF,
+  segments: NoteSegment[],
+  maxWidth: number,
+  lineHeight: number,
+  fontSize: number
+): { lines: NoteLine[]; totalHeight: number } => {
+  if (!segments.length) {
+    return { lines: [], totalHeight: 0 };
+  }
+
+  const lines: NoteLine[] = [];
+  let currentLine: NoteSegment[] = [];
+  let currentWidth = 0;
+  let previousWasNewline = false;
+
+  const getFontVariant = (segment: NoteSegment) => {
+    if (segment.bold && segment.italic) return "bolditalic";
+    if (segment.bold) return "bold";
+    if (segment.italic) return "italic";
+    return "normal";
+  };
+
+  const measure = (text: string, segment: NoteSegment) => {
+    const variant = getFontVariant(segment);
+    pdfInstance.setFont("helvetica", variant as any);
+    pdfInstance.setFontSize(fontSize);
+    return pdfInstance.getTextWidth(text);
+  };
+
+  const flushLine = () => {
+    lines.push({ runs: currentLine });
+    currentLine = [];
+    currentWidth = 0;
+  };
+
+  const addToken = (text: string, segment: NoteSegment) => {
+    if (!text) return;
+    const isWhitespace = /^\s+$/.test(text);
+    if (isWhitespace && !currentLine.length) {
+      return;
+    }
+    const width = measure(text, segment);
+    if (!isWhitespace && currentWidth + width > maxWidth && currentLine.length) {
+      flushLine();
+    }
+    currentLine.push({
+      text,
+      bold: segment.bold,
+      italic: segment.italic,
+      underline: segment.underline,
+      linkHref: segment.linkHref,
+    });
+    currentWidth += width;
+    previousWasNewline = false;
+  };
+
+  segments.forEach((segment) => {
+    if (segment.isNewline) {
+      if (currentLine.length) {
+        flushLine();
+      } else if (!previousWasNewline) {
+        lines.push({ runs: [] });
+      }
+      previousWasNewline = true;
+      return;
+    }
+
+    if (!segment.text) return;
+    const parts = segment.text.split(/(\s+)/);
+    parts.forEach((part) => {
+      if (part) {
+        addToken(part, segment);
+      }
+    });
+  });
+
+  if (currentLine.length) {
+    flushLine();
+  }
+
+  // Remove trailing blank lines
+  while (lines.length && lines[lines.length - 1].runs.length === 0) {
+    lines.pop();
+  }
+
+  const totalHeight = lines.length * lineHeight;
+  return { lines, totalHeight };
+};
+
+const drawNoteLines = (
+  pdfInstance: jsPDF,
+  lines: NoteLine[],
+  startX: number,
+  startY: number,
+  lineHeight: number,
+  fontSize: number,
+  colors: { text: string; link: string }
+) => {
+  let y = startY;
+
+  const getFontVariant = (segment: NoteSegment) => {
+    if (segment.bold && segment.italic) return "bolditalic";
+    if (segment.bold) return "bold";
+    if (segment.italic) return "italic";
+    return "normal";
+  };
+
+  lines.forEach((line) => {
+    if (!line.runs.length) {
+      y += lineHeight;
+      return;
+    }
+
+    let x = startX;
+    line.runs.forEach((run) => {
+      if (!run.text) return;
+      const variant = getFontVariant(run);
+      pdfInstance.setFont("helvetica", variant as any);
+      pdfInstance.setFontSize(fontSize);
+      const color = run.linkHref ? colors.link : colors.text;
+      pdfInstance.setTextColor(color);
+      if (run.linkHref) {
+        pdfInstance.textWithLink(run.text, x, y, { url: run.linkHref });
+      } else {
+        pdfInstance.text(run.text, x, y);
+      }
+      const width = pdfInstance.getTextWidth(run.text);
+      if (run.underline || run.linkHref) {
+        pdfInstance.setDrawColor(color);
+        pdfInstance.setLineWidth(0.2);
+        pdfInstance.line(x, y + 0.5, x + width, y + 0.5);
+      }
+      x += width;
+    });
+    y += lineHeight;
+  });
+};
+
+const LotInfoModal = ({
+  isVisible = false,
+  onClose,
+  loteData,
+}: LotInfoModalProps) => {
+  const { user } = useAuth();
+  const [showQuotation, setShowQuotation] = useState(false);
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [discountPercentage, setDiscountPercentage] = useState(0);
+  const [maxDiscount, setMaxDiscount] = useState<number | null>(null);
+  // const [discountError, setDiscountError] = useState('');
+  const [quotationNotes, setQuotationNotes] = useState('');
+  const sanitizedNotesHtml = useMemo(
+    () => sanitizeNotesHtml(quotationNotes),
+    [quotationNotes]
+  );
+
+  useEffect(() => {
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+    const projectId = import.meta.env.VITE_PROJECT_ID;
+    if (!apiBaseUrl || !projectId) return;
+    const controller = new AbortController();
+    fetch(`${apiBaseUrl}/settings/project/${projectId}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+      },
+      credentials: 'include',
+      signal: controller.signal
+    })
+      .then(res => res.json())
+      .then((data) => {
+        const rawMax = data?.data?.max_discount;
+        const parsed = typeof rawMax === 'number' ? rawMax : parseFloat(rawMax);
+        if (!isNaN(parsed)) {
+          setMaxDiscount(parsed);
+        }
+        if (data?.data?.quotation_notes) {
+          setQuotationNotes(data.data.quotation_notes);
+        }
+      })
+      .catch(() => {
+        setMaxDiscount(null);
+        setQuotationNotes('');
+      });
+    return () => controller.abort();
+  }, []);
+
+  // Función para obtener solo la parte del lote sin la etapa (para mostrar en el modal)
+  const getLotWithoutPhase = (lotString: string): string => {
+    // Remover "Etapa X - " del inicio si existe (maneja números romanos y arábigos)
+    return lotString.replace(/^Etapa\s+[IVX0-9]+\s*-\s*/i, '').trim();
+  };
+
+  // Payment schedule states
+  const [paymentMethod, setPaymentMethod] = useState("credito_directo");
+  const [separation, setSeparation] = useState({
+    amount: 0,
+    percentage: 0,
+    enabled: false,
+  });
+  const [initial, setInitial] = useState({ amount: 0, percentage: 0 });
+  const [mortgageCredit, setMortgageCredit] = useState({
+    amount: 0,
+    percentage: 0,
+  });
+  const [finalBalance, setFinalBalance] = useState({
+    amount: 0,
+    percentage: 0,
+    date: "",
+  });
+  const [numberOfInstallments, setNumberOfInstallments] = useState(2);
+  const [equivalentInstallments, setEquivalentInstallments] = useState(true);
+  const [firstPaymentDate, setFirstPaymentDate] = useState("");
+  // const [lastPaymentDate, setLastPaymentDate] = useState(''); // Removed - now calculated automatically
+  const [schedule, setSchedule] = useState<any[]>([]);
+  const [needsUpdate, setNeedsUpdate] = useState(false);
+  const [dateError, setDateError] = useState<string>("");
+  // const [calculatedFinalDate, setCalculatedFinalDate] = useState<string>("");
+  // const [savedSchedule, setSavedSchedule] = useState<any[]>([]); // Removed - not needed
+  
+  // Estados para funcionalidades de botones
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [modalType, setModalType] = useState<"print" | "save" | "email">("print");
+  // Estados para rastrear si ya se guardó y los datos guardados
+  const [hasBeenSaved, setHasBeenSaved] = useState(false);
+  const [lastSavedData, setLastSavedData] = useState<any>(null);
+  const [quotationCodeForModal, setQuotationCodeForModal] = useState<string | undefined>(undefined);
+  
+  // Estado para mensaje flotante (toast)
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  // Estados para manejar el focus de inputs formateados
+  const [focusedInputs, setFocusedInputs] = useState<{[key: string]: boolean}>({});
+  // Datos por defecto si no hay datos del lote
+  const defaultLotData = {
+    lot: "Lote sin identificar",
+    status: "Disponible",
+    price: "$0.00",
+    area: "0.00 m²",
+    phase: "1",
+    id: undefined,
+  };
+
+  // Usar datos del lote si están disponibles, sino usar datos por defecto
+
+  const lotData = loteData
+    ? {
+        lot: loteData.nombre || loteData.direccion || "Lote sin identificar",
+        status: loteData.estado || "Disponible",
+        price: loteData.precio
+          ? (() => {
+              const formatted = loteData.precio.toFixed(2);
+              const parts = formatted.split('.');
+              parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+              return `$${parts.join('.')}`;
+            })()
+          : "$0.00",
+        area: loteData.area || "0.00 m²",
+        phase: loteData.phase || "1",
+        id: loteData.id,
+      }
+    : defaultLotData;
+  const normalizedLotStatus = (lotData.status || "").toLowerCase();
+  const statusBadgeStyle = getLotStatusBadgeStyle(normalizedLotStatus);
+  const statusDisplayMap: Record<string, string> = {
+    disponible: "Disponible",
+    reservado: "Reservado",
+    negociacion: "Negociación",
+    vendido: "Vendido",
+  };
+  const statusLabel =
+    statusDisplayMap[normalizedLotStatus] || (typeof lotData.status === "string" ? lotData.status : "Vendido");
+
+  // Constantes para la API de cotizaciones
+  const BASE_API = import.meta.env.VITE_API_BASE_URL;
+  const PROJECT_ID = import.meta.env.VITE_PROJECT_ID; // ID del proyecto NAUTIA CONDOMINOS
+  const LOT_ID = loteData?.id; // ID del lote actual desde la API
+
+  const handleClose = () => {
+    setShowQuotation(false); // Reset to lot info when closing
+    // Resetear estados de guardado cuando se cierra el modal
+    setHasBeenSaved(false);
+    setLastSavedData(null);
+    setQuotationCodeForModal(undefined);
+    onClose?.();
+  };
+
+  // Funciones para manejar el formato dinámico de inputs
+  const handleInputFocus = (inputId: string) => {
+    setFocusedInputs(prev => ({ ...prev, [inputId]: true }));
+  };
+
+  // Función para manejar el blur específico de cada input
+  const handleDecimalBlur = (inputId: string, setter: (value: number) => void) => {
+    const rawValue = rawInputValues[inputId];
+    if (rawValue !== undefined) {
+      const cleanValue = rawValue.replace(/[^0-9.]/g, '');
+      
+      // Si hay un valor válido, redondearlo a 2 decimales
+      if (cleanValue !== '' && cleanValue !== '.') {
+        const numValue = parseFloat(cleanValue);
+        if (!isNaN(numValue)) {
+          const roundedValue = Math.round(numValue * 100) / 100;
+          setter(roundedValue);
+        }
+      }
+    }
+    
+    // Limpiar el valor raw
+    setRawInputValues(prev => {
+      const newValues = { ...prev };
+      delete newValues[inputId];
+      return newValues;
+    });
+    
+    // Quitar el foco
+    setFocusedInputs(prev => ({ ...prev, [inputId]: false }));
+  };
+
+  // Función simple para inputs que no necesitan procesamiento especial
+  const handleInputBlur = (inputId: string) => {
+    setFocusedInputs(prev => ({ ...prev, [inputId]: false }));
+  };
+
+  // Función para redondear a 2 decimales solo si tiene más de 2 decimales
+  // Ref para rastrear el precio anterior y evitar recálculos innecesarios
+  const previousPriceRef = useRef<number | undefined>(undefined);
+  const scheduleRef = useRef<any[]>([]);
+  const previousStatusRef = useRef<string | undefined>(undefined);
+
+  // Sincronizar scheduleRef con schedule
+  useEffect(() => {
+    scheduleRef.current = schedule;
+  }, [schedule]);
+
+  // Detectar cambio de estado del lote y cerrar cotización si ya no está disponible
+  useEffect(() => {
+    const currentStatus = loteData?.estado ? String(loteData.estado).toLowerCase() : undefined;
+    const previousStatus = previousStatusRef.current;
+
+    // Inicializar el estado anterior si es la primera vez
+    if (currentStatus !== undefined && previousStatus === undefined) {
+      previousStatusRef.current = currentStatus;
+      return;
+    }
+
+    // Si el estado cambió y ahora NO es "disponible", cerrar la cotización
+    if (
+      currentStatus !== undefined &&
+      previousStatus !== undefined &&
+      previousStatus === 'disponible' &&
+      currentStatus !== 'disponible' &&
+      showQuotation
+    ) {
+      setShowQuotation(false);
+      
+      // Limpiar el schedule
+      setSchedule([]);
+      
+      // Mostrar mensaje flotante al usuario
+      const statusMessages: Record<string, string> = {
+        reservado: 'El lote ha sido reservado y ya no está disponible para cotizaciones.',
+        vendido: 'El lote ha sido vendido y ya no está disponible para cotizaciones.',
+        negociacion: 'El lote está en negociación y ya no está disponible para cotizaciones.',
+      };
+      
+      const message = statusMessages[currentStatus] || 'El lote ya no está disponible para cotizaciones.';
+      setToastMessage(message);
+      
+      // Ocultar el mensaje después de 5 segundos
+      setTimeout(() => {
+        setToastMessage(null);
+      }, 5000);
+      
+      console.log('[LotInfoModal] Cotización cerrada por cambio de estado:', {
+        estadoAnterior: previousStatus,
+        estadoNuevo: currentStatus,
+      });
+    }
+
+    // Actualizar el ref con el estado actual
+    if (currentStatus !== undefined) {
+      previousStatusRef.current = currentStatus;
+    }
+  }, [loteData?.estado, showQuotation]);
+
+  // Recalcular cuotas cuando cambie el precio del lote (actualización en tiempo real vía WebSocket)
+  useEffect(() => {
+    const currentPrice = loteData?.precio;
+    const currentSchedule = scheduleRef.current;
+    
+    // Solo recalcular si:
+    // 1. Hay cuotas generadas
+    // 2. El modal de cotización está visible
+    // 3. El precio existe y ha cambiado realmente
+    if (
+      currentSchedule.length > 0 && 
+      showQuotation && 
+      currentPrice !== undefined && 
+      typeof currentPrice === 'number' &&
+      currentPrice !== previousPriceRef.current
+    ) {
+      const finalPrice = (currentPrice || 0) - discountAmount;
+      
+      // Recalcular los montos manteniendo los porcentajes y fechas
+      const updatedSchedule = currentSchedule.map((item) => {
+        // Mantener todos los datos del item (fechas, porcentajes, etc.)
+        const updatedItem = { ...item };
+        
+        // Recalcular el monto basado en el nuevo precio final y el porcentaje
+        if (updatedItem.percentage !== undefined) {
+          updatedItem.amount = roundToTwoDecimals((updatedItem.percentage / 100) * finalPrice);
+        }
+        
+        return updatedItem;
+      });
+      
+      // Aplicar cálculo preciso para asegurar que la suma sea exacta
+      const preciseSchedule = calculatePreciseAmounts(updatedSchedule, finalPrice);
+      setSchedule(preciseSchedule);
+      
+      // Actualizar el ref con el nuevo precio
+      previousPriceRef.current = currentPrice;
+      
+      console.log('[LotInfoModal] Cuotas recalculadas por cambio de precio en tiempo real:', {
+        precioAnterior: previousPriceRef.current,
+        precioNuevo: currentPrice,
+        finalPrice,
+      });
+    } else if (currentPrice !== undefined && typeof currentPrice === 'number') {
+      // Actualizar el ref incluso si no recalculamos (para la próxima vez)
+      previousPriceRef.current = currentPrice;
+    }
+  }, [loteData?.precio, showQuotation, discountAmount]); // Solo recalcular cuando cambie el precio, se abra/cierre la cotización, o cambie el descuento
+
+  const roundToTwoDecimals = (value: number): number => {
+    const rounded = Math.round(value * 100) / 100;
+    return rounded;
+  };
+
+  // Función para formatear fechas - acepta múltiples formatos y siempre retorna dd/mm/aaaa
+  /*
+  const formatDateInput = (input: string): string => {
+    if (!input) return '';
+    
+    // Limpiar el input de caracteres no numéricos excepto /
+    const cleanInput = input.replace(/[^0-9/]/g, '');
+    
+    // Si está vacío, retornar vacío
+    if (!cleanInput) return '';
+    
+    // Detectar el formato y convertir a dd/mm/aaaa
+    let day = '';
+    let month = '';
+    let year = '';
+    
+    // Caso 1: dd/mm/aa o dd/mm/aaaa
+    if (cleanInput.includes('/')) {
+      const parts = cleanInput.split('/');
+      if (parts.length >= 2) {
+        day = parts[0].padStart(2, '0');
+        month = parts[1].padStart(2, '0');
+        if (parts[2]) {
+          year = parts[2];
+          // Si tiene 2 dígitos, asumir 20xx
+          if (year.length === 2) {
+            year = '20' + year;
+          }
+        }
+      }
+    }
+    // Caso 2: ddmmaa o ddmmaaaa (sin separadores)
+    else {
+      const numbers = cleanInput.replace(/\D/g, '');
+      
+      if (numbers.length === 4) {
+        // ddmmaa
+        day = numbers.substring(0, 2);
+        month = numbers.substring(2, 4);
+        year = '2024'; // Año actual por defecto
+      } else if (numbers.length === 5) {
+        // ddmmaa (5 dígitos: dd/mm/aa)
+        day = numbers.substring(0, 2);
+        month = numbers.substring(2, 4);
+        year = '20' + numbers.substring(4, 5);
+      } else if (numbers.length === 6) {
+        // ddmmaa
+        day = numbers.substring(0, 2);
+        month = numbers.substring(2, 4);
+        year = '20' + numbers.substring(4, 6);
+      } else if (numbers.length === 8) {
+        // ddmmaaaa
+        day = numbers.substring(0, 2);
+        month = numbers.substring(2, 4);
+        year = numbers.substring(4, 8);
+      }
+    }
+    
+    // Validar que tengamos los componentes necesarios
+    if (day && month && year) {
+      // Validar rangos básicos
+      const dayNum = parseInt(day);
+      const monthNum = parseInt(month);
+      const yearNum = parseInt(year);
+      
+      if (dayNum >= 1 && dayNum <= 31 && monthNum >= 1 && monthNum <= 12 && yearNum >= 2000) {
+        const candidate = new Date(yearNum, monthNum - 1, dayNum);
+        if (isNaN(candidate.getTime())) {
+          return '';
+        }
+        return `${day}/${month}/${year}`;
+      }
+    }
+    
+    // Si no se puede formatear correctamente, retornar vacío para invalidar la fecha
+    return '';
+  };
+  */
+
+  const toDateInputValue = (displayDate?: string | null): string => {
+    if (!displayDate) return '';
+    const [day, month, year] = displayDate.split('/');
+    if (!day || !month || !year) return '';
+    const paddedDay = day.padStart(2, '0');
+    const paddedMonth = month.padStart(2, '0');
+    const paddedYear = year.padStart(4, '0');
+    return `${paddedYear}-${paddedMonth}-${paddedDay}`;
+  };
+
+  const fromDateInputValue = (inputValue?: string | null): string => {
+    if (!inputValue) return '';
+    const [year, month, day] = inputValue.split('-');
+    if (!year || !month || !day) return '';
+    const paddedDay = day.padStart(2, '0');
+    const paddedMonth = month.padStart(2, '0');
+    return `${paddedDay}/${paddedMonth}/${year}`;
+  };
+
+  // Función para obtener la fecha de hoy en formato yyyy-MM-dd para el atributo min
+  /*
+  const getTodayDateInput = (): string => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  */
+
+  // Función para validar fecha según el tipo de item (Separación/Inicial vs Cuotas)
+  /*
+  const validateScheduleDate = (
+    dateString: string,
+    itemName: string
+  ): { isValid: boolean; error?: string } => {
+    if (!dateString) {
+      return { isValid: false, error: "Fecha requerida" };
+    }
+
+    try {
+      const parsedDate = parse(dateString, "dd/MM/yyyy", new Date());
+      if (!isValid(parsedDate)) {
+        return {
+          isValid: false,
+          error: "Formato de fecha inválido (dd/mm/aaaa)",
+        };
+      }
+
+      const today = startOfDay(new Date());
+      if (isBefore(parsedDate, today)) {
+        return { isValid: false, error: "La fecha debe ser hoy o en el futuro" };
+      }
+
+      // Si no hay fecha de primer pago, solo validar que sea hoy o futuro
+      if (!firstPaymentDate) {
+        return { isValid: true };
+      }
+
+      const firstPaymentParsed = parse(firstPaymentDate, "dd/MM/yyyy", new Date());
+      if (!isValid(firstPaymentParsed)) {
+        return { isValid: true }; // Si la fecha de primer pago es inválida, permitir cualquier fecha válida
+      }
+
+      const isSeparacionOrInicial = itemName === "Separación" || itemName === "Inicial";
+      const isCuota1 = itemName === "Cuota 1";
+      const isCuota = itemName.startsWith("Cuota");
+
+      if (isSeparacionOrInicial) {
+        // Separación e Inicial deben ser ANTES de la fecha de primer pago
+        if (!isBefore(parsedDate, firstPaymentParsed)) {
+          return {
+            isValid: false,
+            error: `La fecha debe ser anterior a la fecha de primer pago (${firstPaymentDate})`,
+          };
+        }
+      } else if (isCuota1) {
+        // Cuota 1: puede ser cualquier fecha válida (hoy o futuro), se convertirá en la nueva referencia
+        // No necesita validación adicional más allá de que sea hoy o futuro
+        return { isValid: true };
+      } else if (isCuota) {
+        // Las cuotas 2, 3, etc. deben ser POSTERIORES o IGUALES a la fecha de primer pago
+        if (isBefore(parsedDate, firstPaymentParsed)) {
+          return {
+            isValid: false,
+            error: `La fecha debe ser posterior o igual a la fecha de primer pago (${firstPaymentDate})`,
+          };
+        }
+      }
+
+      return { isValid: true };
+    } catch {
+      return { isValid: false, error: "Error al validar la fecha" };
+    }
+  };
+  */
+
+  // Función para obtener el min/max según el tipo de item
+  /*
+  const getDateInputMinMax = (itemName: string): { min?: string; max?: string } => {
+    const today = getTodayDateInput();
+    
+    if (!firstPaymentDate) {
+      return { min: today };
+    }
+
+    const firstPaymentInput = toDateInputValue(firstPaymentDate);
+    if (!firstPaymentInput) {
+      return { min: today };
+    }
+
+    const isSeparacionOrInicial = itemName === "Separación" || itemName === "Inicial";
+    const isCuota1 = itemName === "Cuota 1";
+    const isCuota = itemName.startsWith("Cuota");
+
+    if (isSeparacionOrInicial) {
+      // Separación e Inicial: máximo es un día antes de firstPaymentDate
+      const firstPaymentParsed = parse(firstPaymentDate, "dd/MM/yyyy", new Date());
+      if (isValid(firstPaymentParsed)) {
+        const maxDate = new Date(firstPaymentParsed);
+        maxDate.setDate(maxDate.getDate() - 1);
+        const year = maxDate.getFullYear();
+        const month = String(maxDate.getMonth() + 1).padStart(2, '0');
+        const day = String(maxDate.getDate()).padStart(2, '0');
+        return { min: today, max: `${year}-${month}-${day}` };
+      }
+    } else if (isCuota1) {
+      // Cuota 1: puede ser cualquier fecha desde hoy (se convertirá en la nueva referencia)
+      return { min: today };
+    } else if (isCuota) {
+      // Cuotas 2, 3, etc.: mínimo es firstPaymentDate
+      return { min: firstPaymentInput };
+    }
+
+    return { min: today };
+  };
+  */
+
+  const getFormattedValue = (value: number, type: 'usd' | 'percentage' | 'cuotas', inputId: string) => {
+    const isFocused = focusedInputs[inputId];
+    const rawValue = rawInputValues[inputId];
+    
+    if (isFocused && rawValue !== undefined) {
+      // Cuando está enfocado y hay un valor raw, mostrar exactamente lo que escribió el usuario
+      return rawValue;
+    } else if (isFocused) {
+      // Cuando está enfocado pero no hay valor raw, mostrar solo el número sin formato
+      switch (type) {
+        case 'usd':
+        case 'percentage':
+          return value > 0 ? value.toFixed(2) : '';
+        case 'cuotas':
+          return value > 0 ? value.toString() : '';
+        default:
+          return value > 0 ? value.toString() : '';
+      }
+    } else {
+      // Cuando no está enfocado, mostrar con formato según las reglas
+      switch (type) {
+        case 'usd':
+          if (value > 0) {
+            // Redondear a 2 decimales y formatear
+            const rounded = Math.round(value * 100) / 100;
+            return `${rounded.toFixed(2)} USD`;
+          }
+          return '';
+        case 'percentage':
+          if (value > 0) {
+            // Redondear a 2 decimales y formatear
+            const rounded = Math.round(value * 100) / 100;
+            return `${rounded.toFixed(2)} %`;
+          }
+          return '';
+        case 'cuotas':
+          return value > 0 ? `${value} cuotas` : '';
+        default:
+          return value > 0 ? Math.round(value * 100) / 100 : '';
+      }
+    }
+  };
+
+  const getBasePrice = () => {
+    const price = loteData?.precio;
+    if (typeof price === "number") return price;
+    const parsed = price ? parseFloat(String(price)) : NaN;
+    return !isNaN(parsed) ? parsed : 0;
+  };
+
+  const validateDiscountValue = (percentage: number) => {
+    if (percentage < 0) return false;
+    if (maxDiscount !== null && percentage > maxDiscount) return false;
+    return true;
+  };
+
+  const applyDiscountFromAmount = (amount: number) => {
+    const priceBase = getBasePrice();
+    const percentage = priceBase ? (amount / priceBase) * 100 : 0;
+    if (!validateDiscountValue(percentage)) {
+      setDiscountAmount(0);
+      setDiscountPercentage(0);
+      return;
+    }
+    setDiscountAmount(roundToTwoDecimals(amount));
+    setDiscountPercentage(Math.round(percentage * 1000) / 1000);
+    setNeedsUpdate(true);
+  };
+
+  const applyDiscountFromPercentage = (percentage: number) => {
+    if (!validateDiscountValue(percentage)) return;
+    const priceBase = getBasePrice();
+    const amount = (percentage / 100) * priceBase;
+    setDiscountPercentage(Math.round(percentage * 1000) / 1000);
+    setDiscountAmount(roundToTwoDecimals(amount));
+    setNeedsUpdate(true);
+  };
+
+  const formatMoney = (value: number) => {
+    const formatted = value.toFixed(2);
+    const parts = formatted.split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return `$${parts.join(".")}`;
+  };
+
+  const basePrice = getBasePrice();
+  const finalPrice = Math.max(0, basePrice - discountAmount);
+
+  const discountPresets = useMemo(() => {
+    const max = maxDiscount ?? 20;
+    const presets = [0, 5, 10, 15].filter((p) => p <= max);
+    const roundedMax = Math.round(max);
+    if (roundedMax > 0 && !presets.includes(roundedMax)) {
+      presets.push(roundedMax);
+    }
+    return [...new Set(presets)].sort((a, b) => a - b);
+  }, [maxDiscount]);
+
+  const estimatedMonthlyPayment = useMemo(() => {
+    if (paymentMethod !== "credito_directo" || numberOfInstallments <= 0) return 0;
+    const financed = Math.max(0, finalPrice - separation.amount - initial.amount);
+    return roundToTwoDecimals(financed / numberOfInstallments);
+  }, [
+    paymentMethod,
+    numberOfInstallments,
+    finalPrice,
+    separation.amount,
+    initial.amount,
+  ]);
+
+  const handlePaymentMethodChange = (method: string) => {
+    setPaymentMethod(method);
+
+    // Reset all payment fields when changing method
+    setSeparation({ amount: 0, percentage: 0, enabled: false });
+    setInitial({ amount: 0, percentage: 0 });
+    setMortgageCredit({ amount: 0, percentage: 0 });
+    setFinalBalance({ amount: 0, percentage: 0, date: "" });
+    setNumberOfInstallments(0);
+    setEquivalentInstallments(true);
+    setFirstPaymentDate("");
+    setSchedule([]);
+    setNeedsUpdate(false);
+    setDateError("");
+    // setCalculatedFinalDate("");
+  };
+
+  // Debug: Log when paymentMethod changes
+  useEffect(() => {
+  }, [paymentMethod]);
+
+  // Función auxiliar para calcular montos de manera precisa
+  // Función para redondear porcentajes a máximo 3 decimales
+  const roundPercentage = (percentage: number) => {
+    return Math.round(percentage * 1000) / 1000;
+  };
+
+
+  // Función para validar entrada de decimales mientras se escribe
+  const validateDecimalInput = (value: string): boolean => {
+    // Solo permitir números y punto decimal
+    const cleanValue = value.replace(/[^0-9.]/g, '');
+    
+    // Si el valor original contiene caracteres no permitidos, bloquear
+    if (value !== cleanValue) {
+      return false;
+    }
+    
+    // Permitir valores vacíos o que empiecen con punto
+    if (cleanValue === '' || cleanValue === '.') {
+      return true;
+    }
+    
+    // Verificar que no haya múltiples puntos decimales
+    const dotCount = (cleanValue.match(/\./g) || []).length;
+    if (dotCount > 1) {
+      return false;
+    }
+    
+    // Si hay punto decimal, verificar que no tenga más de 2 decimales
+    if (cleanValue.includes('.')) {
+      const parts = cleanValue.split('.');
+      if (parts[1] && parts[1].length > 2) {
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
+  // Función para extraer número de la entrada
+  const extractNumber = (value: string): number => {
+    const cleanValue = value.replace(/[^0-9.]/g, '');
+    
+    // Si está vacío, devolver 0
+    if (cleanValue === '') {
+      return 0;
+    }
+    
+    // Si solo tiene un punto, devolver 0 pero permitir que se mantenga
+    if (cleanValue === '.') {
+      return 0;
+    }
+    
+    const numValue = parseFloat(cleanValue);
+    return isNaN(numValue) ? 0 : numValue;
+  };
+
+  // Estados para manejar valores raw de los inputs
+  const [rawInputValues, setRawInputValues] = useState<{[key: string]: string}>({});
+
+  // Función para manejar el valor del input mientras se escribe
+  const handleDecimalInput = (value: string, inputId: string, setter: (value: number) => void) => {
+    if (validateDecimalInput(value)) {
+      // Guardar el valor raw para mostrar mientras se escribe
+      setRawInputValues(prev => ({
+        ...prev,
+        [inputId]: value
+      }));
+      
+      const cleanValue = value.replace(/[^0-9.]/g, '');
+      
+      // Si está vacío o solo tiene un punto, no actualizar el estado numérico
+      if (cleanValue === '' || cleanValue === '.') {
+        return;
+      }
+      
+      const numValue = extractNumber(value);
+      setter(numValue);
+    }
+  };
+
+  const calculatePreciseAmounts = (items: any[], finalPrice: number) => {
+    if (items.length === 0) return items;
+    
+    // Calcular montos para todos los items excepto el último
+    let totalCalculatedAmount = 0;
+    const result = [...items];
+    
+    for (let i = 0; i < result.length - 1; i++) {
+      result[i].amount = roundToTwoDecimals((result[i].percentage / 100) * finalPrice);
+      totalCalculatedAmount += result[i].amount;
+    }
+    
+    // Para el último item, calcular el monto restante
+    if (result.length > 0) {
+      const lastIndex = result.length - 1;
+      result[lastIndex].amount = roundToTwoDecimals(finalPrice - totalCalculatedAmount);
+    }
+    
+    return result;
+  };
+
+  // Función auxiliar para validar porcentajes (máximo 100%)
+  /*
+  const validatePercentage = (value: number): number => {
+    return roundPercentage(Math.min(Math.max(value, 0), 100));
+  };
+  */
+
+  const calculateSchedule = () => {
+    const finalPrice = (loteData?.precio || 445000) - discountAmount;
+
+    const newSchedule: any[] = [];
+
+    if (paymentMethod === "credito_hipotecario") {
+
+      // Agregar separación si está habilitada
+      if (separation.enabled && separation.percentage > 0) {
+        // Buscar si ya existe una separación con fecha en el schedule actual
+        const existingSeparacion = schedule.find(item => item.item === "Separación");
+        newSchedule.push({
+          item: "Separación",
+          date: existingSeparacion?.isEditedDate ? existingSeparacion.date : (existingSeparacion?.date || ""), // Preservar fecha editada
+          lastValidDate: existingSeparacion?.lastValidDate,
+          percentage: existingSeparacion ? existingSeparacion.percentage : separation.percentage,
+          amount: existingSeparacion ? existingSeparacion.amount : separation.amount,
+          isEdited: false,
+        });
+      }
+
+      // Buscar o agregar inicial
+      if (initial.percentage > 0) {
+        // Buscar si ya existe una inicial con fecha en el schedule actual
+        const existingInicial = schedule.find(item => item.item === "Inicial");
+        newSchedule.push({
+          item: "Inicial",
+          date: existingInicial?.isEditedDate ? existingInicial.date : (existingInicial?.date || ""), // Preservar fecha editada
+          lastValidDate: existingInicial?.lastValidDate,
+          percentage: existingInicial ? existingInicial.percentage : initial.percentage,
+          amount: existingInicial ? existingInicial.amount : initial.amount,
+          isEdited: false,
+        });
+      }
+
+      // Calcular porcentajes ya definidos (separación + inicial + CH)
+      const definedPercentage =
+        (separation.enabled ? separation.percentage : 0) + initial.percentage + mortgageCredit.percentage;
+
+      // Calcular el porcentaje restante para las cuotas
+      const remainingPercentage = 100 - definedPercentage;
+
+      if (remainingPercentage < 0) {
+        console.warn("Los porcentajes definidos exceden el 100%");
+        return;
+      }
+
+      // Agregar cuotas
+      if (numberOfInstallments > 0) {
+        const installmentPercentage = equivalentInstallments
+          ? remainingPercentage / numberOfInstallments
+          : remainingPercentage / numberOfInstallments;
+
+        for (let i = 1; i <= numberOfInstallments; i++) {
+          const existing = schedule.find(s => s.item === `Cuota ${i}`);
+          const installmentDate = existing?.isEditedDate ? existing.date : calculateInstallmentDate(firstPaymentDate, i);
+          newSchedule.push({
+            item: `Cuota ${i}`,
+            date: installmentDate,
+            percentage: roundPercentage(installmentPercentage),
+            amount: (installmentPercentage / 100) * finalPrice,
+            isEdited: false,
+            isEquivalent: equivalentInstallments,
+            isEditedDate: existing?.isEditedDate || false,
+          });
+        }
+      }
+
+      // Agregar crédito hipotecario si está definido
+      if (mortgageCredit.percentage > 0) {
+        const creditDate = calculateInstallmentDate(
+          firstPaymentDate,
+          numberOfInstallments + 1
+        );
+        newSchedule.push({
+          item: "Crédito Hipotecario",
+          date: creditDate,
+          percentage: mortgageCredit.percentage,
+          amount: mortgageCredit.amount,
+          isEdited: false,
+        });
+      }
+    } else if (paymentMethod === "credito_directo") {
+      // Modalidad: Crédito Directo
+
+      // Agregar separación si está habilitada
+      if (separation.enabled && separation.percentage > 0) {
+        // Buscar si ya existe una separación con fecha en el schedule actual
+        const existingSeparacion = schedule.find(item => item.item === "Separación");
+        newSchedule.push({
+          item: "Separación",
+          date: existingSeparacion?.date || "", // Preservar fecha existente o vacío
+          percentage: separation.percentage,
+          amount: separation.amount,
+          isEdited: false,
+        });
+      }
+
+      // Buscar o agregar inicial
+      if (initial.percentage > 0) {
+        // Buscar si ya existe una inicial con fecha en el schedule actual
+        const existingInicial = schedule.find(item => item.item === "Inicial");
+        newSchedule.push({
+          item: "Inicial",
+          date: existingInicial?.date || "", // Preservar fecha existente o vacío
+          percentage: initial.percentage,
+          amount: initial.amount,
+          isEdited: false,
+        });
+      }
+
+      // Calcular porcentajes ya definidos (separación + inicial)
+      const definedPercentage = (separation.enabled ? separation.percentage : 0) + initial.percentage;
+
+      // Calcular el porcentaje restante para las cuotas
+      const remainingPercentage = 100 - definedPercentage;
+
+      if (remainingPercentage < 0) {
+        console.warn("Los porcentajes definidos exceden el 100%");
+        return;
+      }
+
+      // Agregar cuotas
+      if (numberOfInstallments > 0) {
+        const installmentPercentage = equivalentInstallments
+          ? remainingPercentage / numberOfInstallments
+          : remainingPercentage / numberOfInstallments;
+
+        for (let i = 1; i <= numberOfInstallments; i++) {
+          const installmentDate = calculateInstallmentDate(firstPaymentDate, i);
+          newSchedule.push({
+            item: `Cuota ${i}`,
+            date: installmentDate,
+            percentage: roundPercentage(installmentPercentage),
+            amount: (installmentPercentage / 100) * finalPrice,
+            isEdited: false,
+            isEquivalent: equivalentInstallments,
+          });
+        }
+      }
+    } else if (paymentMethod === "contado") {
+      // Modalidad: Contado
+
+      // Agregar separación si está habilitada
+      if (separation.enabled && separation.percentage > 0) {
+        // Buscar si ya existe una separación con fecha en el schedule actual
+        const existingSeparacion = schedule.find(item => item.item === "Separación");
+        newSchedule.push({
+          item: "Separación",
+          date: existingSeparacion?.date || "", // Preservar fecha existente o vacío
+          percentage: separation.percentage,
+          amount: separation.amount,
+          isEdited: false,
+        });
+      }
+
+      // Buscar o agregar inicial
+      if (initial.percentage > 0) {
+        // Buscar si ya existe una inicial con fecha en el schedule actual
+        const existingInicial = schedule.find(item => item.item === "Inicial");
+        newSchedule.push({
+          item: "Inicial",
+          date: existingInicial?.date || "", // Preservar fecha existente o vacío
+          percentage: initial.percentage,
+          amount: initial.amount,
+          isEdited: false,
+        });
+      }
+
+      // Calcular porcentaje restante para saldo final
+      const usedPercentage = newSchedule.reduce((total, item) => total + item.percentage, 0);
+      const remainingPercentage = 100 - usedPercentage;
+      
+      // Agregar pago saldo final (automático o manual)
+      if (remainingPercentage > 0) {
+        newSchedule.push({
+          item: "Pago Saldo Final",
+          date: finalBalance.date || "Inmediato",
+          percentage: remainingPercentage,
+          amount: (remainingPercentage / 100) * finalPrice,
+          isEdited: false,
+        });
+      }
+    }
+    // Aplicar cálculo preciso de montos
+    const preciseSchedule = calculatePreciseAmounts(newSchedule, finalPrice);
+    setSchedule(preciseSchedule);
+    setNeedsUpdate(false);
+
+    // Actualizar fecha final calculada
+    if (paymentMethod === "credito_directo" && numberOfInstallments > 0) {
+      /*
+      const finalDate = calculateFinalPaymentDate(
+        firstPaymentDate,
+        numberOfInstallments
+      );
+      // setCalculatedFinalDate(finalDate);
+      */
+    }
+  };
+
+  const calculateInstallmentDate = (
+    startDate: string,
+    installmentIndex: number
+  ): string => {
+    if (!startDate) return "";
+
+    try {
+      // Parsear fecha de inicio (formato dd/mm/aaaa)
+      const parsedDate = parse(startDate, "dd/MM/yyyy", new Date());
+
+      if (!isValid(parsedDate)) {
+        console.error("Invalid start date format");
+        return "";
+      }
+
+      // Agregar meses usando date-fns para manejar casos especiales
+      // La primera cuota (index 1) debe usar la fecha de inicio directamente
+      const installmentDate = addMonths(parsedDate, installmentIndex - 1);
+
+      // Formatear de vuelta a dd/mm/aaaa
+      return format(installmentDate, "dd/MM/yyyy");
+    } catch (error) {
+      console.error("Error calculating installment date:", error);
+      return "";
+    }
+  };
+
+  /*
+  const validateStartDate = (
+    dateString: string
+  ): { isValid: boolean; error?: string } => {
+    if (!dateString) {
+      return { isValid: false, error: "Fecha de inicio requerida" };
+    }
+
+    try {
+      // Intentar parsear con formato dd/mm/aaaa
+      const parsedDate = parse(dateString, "dd/MM/yyyy", new Date());
+
+      if (!isValid(parsedDate)) {
+        return {
+          isValid: false,
+          error: "Formato de fecha inválido (dd/mm/aaaa)",
+        };
+      }
+
+      const today = startOfDay(new Date());
+      const currentYear = new Date().getFullYear();
+      const dateYear = parsedDate.getFullYear();
+
+      // No puede ser de un año anterior
+      if (dateYear < currentYear) {
+        return {
+          isValid: false,
+          error: "La fecha no puede ser de un año anterior",
+        };
+      }
+
+      // No puede ser en el pasado (pero sí puede ser hoy)
+      if (isBefore(parsedDate, today)) {
+        return { isValid: false, error: "La fecha debe ser hoy o en el futuro" };
+      }
+
+      return { isValid: true };
+    } catch {
+      return { isValid: false, error: "Error al validar la fecha" };
+    }
+  };
+  */
+
+  /*
+  const calculateFinalPaymentDate = (
+    startDate: string,
+    numberOfInstallments: number
+  ): string => {
+    if (!startDate || numberOfInstallments <= 0) return "";
+
+    try {
+      const parsedDate = parse(startDate, "dd/MM/yyyy", new Date());
+      if (!isValid(parsedDate)) return "";
+
+      // La fecha final es la última cuota (número de cuotas - 1 meses después)
+      const finalDate = addMonths(parsedDate, numberOfInstallments - 1);
+      return format(finalDate, "dd/MM/yyyy");
+    } catch (error) {
+      console.error("Error calculating final payment date:", error);
+      return "";
+    }
+  };
+  */
+
+  const generateSchedule = () => {
+    // Sincronizar estados superiores desde la tabla para Separación e Inicial
+    syncSeparationAndInitialFromSchedule();
+    
+    // Si ya hay un cronograma y hay cuotas editadas, preservar los datos editados
+    if (schedule.length > 0 && !equivalentInstallments) {
+      const hasEditedCuotas = schedule.some(item => 
+        item.item.startsWith("Cuota") && item.isEdited
+      );
+      
+      if (hasEditedCuotas) {
+        // Solo recalcular fechas y mantener valores editados
+        const newSchedule = schedule.map((item, index) => ({
+          ...item,
+          date: item.isEditedDate ? item.date : calculateInstallmentDate(firstPaymentDate, index),
+          lastValidDate: item.lastValidDate,
+          isEquivalent: equivalentInstallments,
+        }));
+        setSchedule(newSchedule);
+        setNeedsUpdate(false);
+        return;
+      }
+    }
+    
+    // Si no hay cuotas editadas o son equivalentes, regenerar todo
+    calculateSchedule();
+    setNeedsUpdate(false);
+  };
+
+  const updateSchedule = () => {
+    // Sincronizar estados superiores desde la tabla para Separación e Inicial
+    syncSeparationAndInitialFromSchedule();
+    if (equivalentInstallments) {
+      // Si son equivalentes, recalcular todo
+      calculateSchedule();
+    } else {
+      // Si no son equivalentes, mantener los valores editados y solo recalcular fechas
+      const newSchedule = schedule.map((item, index) => ({
+        ...item,
+        date: item.isEditedDate ? item.date : calculateInstallmentDate(firstPaymentDate, index),
+        lastValidDate: item.lastValidDate,
+        isEquivalent: equivalentInstallments, // Actualizar propiedad isEquivalent
+      }));
+      setSchedule(newSchedule);
+      // Los valores editados se mantienen sin recalcular
+    }
+    setNeedsUpdate(false);
+  };
+
+  const syncSeparationAndInitialFromSchedule = () => {
+    try {
+      const sep = schedule.find((s) => s.item === "Separación");
+      if (sep) {
+        const percentage = Math.max(0, Math.min(100, Number(sep.percentage) || 0));
+        const amount = Math.max(0, Number(sep.amount) || 0);
+        setSeparation({ amount, percentage, enabled: percentage > 0 });
+      }
+
+      const ini = schedule.find((s) => s.item === "Inicial");
+      if (ini) {
+        const percentage = Math.max(0, Math.min(100, Number(ini.percentage) || 0));
+        const amount = Math.max(0, Number(ini.amount) || 0);
+        setInitial({ amount, percentage });
+      }
+    } catch {
+      // No-op: sincronización defensiva
+    }
+  };
+
+  /*
+  const handleFieldChange = (_field?: string) => {
+    if (_field) {
+      setNeedsUpdate(true);
+    }
+  };
+  */
+
+  /*
+  const handleInstallmentChange = (
+    index: number,
+    field: "percentage" | "amount",
+    value: number
+  ) => {
+    // Si son equivalentes, solo bloquear edición en filas de Cuota; permitir Separación/Inicial
+    if (equivalentInstallments && /^Cuota\s/.test(schedule[index]?.item || '')) return;
+
+    const newSchedule = [...schedule];
+    const finalPrice = (loteData?.precio || 445000) - discountAmount;
+
+    // Validar porcentaje si es necesario
+    const validatedValue = field === "percentage" ? validatePercentage(value) : value;
+
+    // Actualizar la cuota modificada
+    newSchedule[index] = {
+      ...newSchedule[index],
+      [field]: validatedValue,
+      isEdited: true, // Marcar como editada
+    };
+
+    // Si cambió el porcentaje, calcular el monto
+    if (field === "percentage") {
+      newSchedule[index].amount = (validatedValue / 100) * finalPrice;
+    }
+    // Si cambió el monto, calcular el porcentaje
+    else if (field === "amount") {
+      newSchedule[index].percentage = validatePercentage((value / finalPrice) * 100);
+    }
+
+    // SIEMPRE recalcular las demás cuotas para mantener el total del 100%
+    recalculateRemainingInstallments(newSchedule, finalPrice);
+
+    setSchedule(newSchedule);
+    setNeedsUpdate(true);
+
+    // Si la fila es Separación o Inicial, sincronizar inputs superiores inmediatamente
+    const editedItem = newSchedule[index];
+    if (editedItem?.item === "Separación") {
+      const syncPercentage = Math.max(0, Math.min(100, Number(editedItem.percentage) || 0));
+      const syncAmount = Math.max(0, Number(editedItem.amount) || 0);
+      setSeparation({ amount: syncAmount, percentage: syncPercentage, enabled: syncPercentage > 0 });
+    } else if (editedItem?.item === "Inicial") {
+      const syncPercentage = Math.max(0, Math.min(100, Number(editedItem.percentage) || 0));
+      const syncAmount = Math.max(0, Number(editedItem.amount) || 0);
+      setInitial({ amount: syncAmount, percentage: syncPercentage });
+    }
+  };
+  */
+
+  /*
+  const recalculateRemainingInstallments = (
+    schedule: any[],
+    finalPrice: number
+  ) => {
+    // Calcular el porcentaje ya ocupado por items fijos y cuotas editadas
+    let usedPercentage = 0;
+    
+    // Sumar items fijos (separación, inicial, crédito hipotecario, etc.)
+    schedule.forEach((item) => {
+      if (!item.item.startsWith("Cuota")) {
+        usedPercentage += item.percentage || 0;
+      }
+    });
+    
+    // Sumar cuotas editadas
+    schedule.forEach((item) => {
+      if (item.item.startsWith("Cuota") && item.isEdited) {
+        usedPercentage += item.percentage || 0;
+      }
+    });
+    
+    // Agregar items externos que no están en el schedule
+    if (mortgageCredit.percentage > 0) {
+      usedPercentage += mortgageCredit.percentage;
+    }
+    if (finalBalance.percentage > 0) {
+      usedPercentage += finalBalance.percentage;
+    }
+    
+    // Calcular el porcentaje restante para distribuir entre cuotas no editadas
+    const remainingPercentage = 100 - usedPercentage;
+
+    // Buscar solo CUOTAS que no han sido editadas (no tocar separación, inicial, crédito hipotecario, etc.)
+    const uneditedInstallments = schedule.filter((item) => 
+      !item.isEdited && item.item.startsWith("Cuota")
+    );
+
+    if (uneditedInstallments.length > 0) {
+      const distributionPerInstallment =
+        remainingPercentage / uneditedInstallments.length;
+
+      // Calcular montos para todas las cuotas no editadas excepto la última
+      const uneditedIndices: number[] = [];
+      schedule.forEach((item, index) => {
+        if (!item.isEdited && item.item.startsWith("Cuota")) {
+          uneditedIndices.push(index);
+        }
+      });
+
+      // Calcular montos para todas las cuotas excepto la última
+      let totalCalculatedAmount = 0;
+      for (let i = 0; i < uneditedIndices.length - 1; i++) {
+        const index = uneditedIndices[i];
+        schedule[index].percentage = roundPercentage(distributionPerInstallment);
+        schedule[index].amount = roundToTwoDecimals((distributionPerInstallment / 100) * finalPrice);
+        totalCalculatedAmount += schedule[index].amount;
+      }
+
+      // Para la última cuota, calcular el monto restante para que la suma sea exacta
+      if (uneditedIndices.length > 0) {
+        const lastIndex = uneditedIndices[uneditedIndices.length - 1];
+        schedule[lastIndex].percentage = roundPercentage(distributionPerInstallment);
+        
+        // Calcular el monto restante para que la suma total sea exacta
+        const remainingAmount = roundToTwoDecimals(finalPrice - totalCalculatedAmount);
+        schedule[lastIndex].amount = remainingAmount;
+      }
+    }
+  };
+  */
+
+  // Función removida - no se necesita recálculo automático para cuotas no equivalentes
+
+  const handleDateChange = (value: string) => {
+    // Solo guardar el valor sin formatear mientras se escribe
+    setFirstPaymentDate(value);
+    
+    // Limpiar errores mientras se escribe
+    setDateError("");
+    // setCalculatedFinalDate("");
+    
+    setNeedsUpdate(true);
+  };
+
+  /*
+  const handleDateBlur = (value: string) => {
+    const trimmedValue = value.trim();
+    // Formatear la fecha cuando se desenfoca
+    const formattedDate = formatDateInput(value);
+    setFirstPaymentDate(formattedDate);
+    
+    // Solo validar si la fecha está completa y formateada
+    if (formattedDate && formattedDate.length === 10 && formattedDate.includes("/")) {
+      const validation = validateStartDate(formattedDate);
+      setDateError(validation.isValid ? "" : validation.error || "");
+
+      // Calcular fecha final automáticamente solo si es válida
+      if (validation.isValid) {
+        const finalDate = calculateFinalPaymentDate(
+          formattedDate,
+          numberOfInstallments
+        );
+        // setCalculatedFinalDate(finalDate);
+
+        // Recalcular fechas de cuotas si ya hay un cronograma
+        if (schedule.length > 0) {
+          const newSchedule = schedule.map((item, index) => ({
+            ...item,
+            date: calculateInstallmentDate(formattedDate, index),
+          }));
+          setSchedule(newSchedule);
+        }
+      } else {
+        // setCalculatedFinalDate("");
+      }
+    } else {
+      // Si no está completa, limpiar todo y mostrar mensaje descriptivo
+      if (!trimmedValue) {
+        setDateError("Fecha de inicio requerida");
+      } else {
+        setDateError("Ingrese una fecha válida en formato dd/mm/aaaa");
+      }
+      // setCalculatedFinalDate("");
+    }
+  };
+  */
+
+  const handleWhatsAppClick = () => {
+    const whatsappUrl = "https://api.whatsapp.com/send/?phone=%2B51972874234&text&type=phone_number&app_absent=0";
+    window.open(whatsappUrl, "_blank");
+  };
+
+
+  // Funciones auxiliares para formatear datos
+  const formatPrice = (price: string | number): string => {
+    // Si es un string, intentar parsear
+    const numPrice = typeof price === 'string' 
+      ? parseFloat(price.replace(/[^0-9.-]/g, ''))
+      : price;
+    
+    if (isNaN(numPrice)) return '$0.00';
+    
+    // Formatear con comas para miles y punto decimal
+    const formatted = numPrice.toFixed(2);
+    const parts = formatted.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return `$${parts.join('.')}`;
+  };
+
+  const formatPhone = (phone: string, countryCode: string = '+51'): string => {
+    if (!phone) return '';
+    // Remover caracteres no numéricos (el phone ya viene con el formato desde el ContactModal)
+    // Si viene con espacios, mantenerlo, si no, formatearlo
+    if (phone.includes(' ')) {
+      // Ya está formateado con espacios
+      return `${countryCode} ${phone}`;
+    }
+    // Formatear si es necesario
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length >= 9) {
+      const number = digits.slice(0, 9);
+      const formatted = `${number.slice(0, 3)} ${number.slice(3, 6)} ${number.slice(6)}`;
+      return `${countryCode} ${formatted}`;
+    }
+    return phone;
+  };
+
+  const formatClientName = (cliente: any): string => {
+    const nombre = cliente?.nombre || '';
+    const apellido = cliente?.apellido || '';
+    return `${nombre} ${apellido}`.trim();
+  };
+
+  const formatClientDocument = (cliente: any): string => {
+    const type = cliente?.tipoDocumento || '';
+    const number = cliente?.dni || '';
+    if (!type && !number) return '';
+    if (!type) return number;
+    if (!number) return type;
+    return `${type}: ${number}`;
+  };
+
+  const formatAmount = (amount: number): string => {
+    const formatted = amount.toFixed(2);
+    const parts = formatted.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return `$${parts.join('.')}`;
+  };
+
+  // Función para generar PDF mejorado que se parezca al HTML de impresión
+  const loadImage = (src: string): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  };
+
+  const generatePDFWithText = async (contactData: any): Promise<Blob> => {
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageWidth  = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 18;
+    const contentWidth = pageWidth - margin * 2;
+
+    const C = {
+      navy:        '#0F1A2E',
+      gold:        '#C5A059',
+      goldLight:   '#E9C176',
+      white:       '#FFFFFF',
+      offWhite:    '#F7F8FA',
+      border:      '#E2E5EC',
+      textDark:    '#111827',
+      textMid:     '#374151',
+      textLight:   '#6B7280',
+      tableHeader: '#1C284C',
+      tableAlt:    '#F3F4F8',
+    };
+
+    // ── HEADER ──────────────────────────────────────────────
+    const headerH = 42;
+    pdf.setFillColor(C.navy);
+    pdf.rect(0, 0, pageWidth, headerH, 'F');
+    pdf.setFillColor(C.gold);
+    pdf.rect(0, headerH - 2, pageWidth, 2, 'F');
+
+    let logoLoaded = false;
+    try {
+      const logoImg = await loadImage('/images/logo_mikonos.png');
+      const lH = 18;
+      const lW = lH * (logoImg.width / (logoImg.height || 1));
+      pdf.addImage(logoImg, 'PNG', margin, (headerH - lH) / 2, lW, lH);
+      logoLoaded = true;
+    } catch { /* sin logo */ }
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(15);
+    pdf.setTextColor(C.white);
+    if (logoLoaded) {
+      pdf.text('Nautia Condominios', pageWidth - margin, headerH / 2 + 1.5, { align: 'right' });
+    } else {
+      pdf.text('Nautia Condominios', pageWidth / 2, headerH / 2 + 1.5, { align: 'center' });
+    }
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8.5);
+    pdf.setTextColor(C.goldLight);
+    pdf.text('CONDOMINIO RESIDENCIAL PLAYA', pageWidth - margin, headerH / 2 + 6.5, { align: 'right' });
+
+    let yPos = headerH + 14;
+
+    // ── TÍTULO + FECHA ───────────────────────────────────────
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(20);
+    pdf.setTextColor(C.textDark);
+    pdf.text('Cotización de Lote', margin, yPos);
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    pdf.setTextColor(C.textLight);
+    const dateStr = new Date().toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric' });
+    pdf.text(dateStr, pageWidth - margin, yPos, { align: 'right' });
+
+    yPos += 3;
+    pdf.setFillColor(C.gold);
+    pdf.rect(margin, yPos, contentWidth, 0.8, 'F');
+    yPos += 9;
+
+    // ── TARJETA INFO ─────────────────────────────────────────
+    const cardPad = 10;
+    const colGap  = 8;
+    const colW    = (contentWidth - colGap) / 2;
+    const leftX   = margin;
+    const rightX  = margin + colW + colGap;
+
+    const lotRows: Array<{ label: string; value: string }> = [
+      { label: 'Lote',   value: String(lotData.lot   || '—') },
+      { label: 'Etapa',  value: String(lotData.phase || '—') },
+      { label: 'Área',   value: String(lotData.area  || '—') },
+      { label: 'Precio', value: formatPrice(lotData.price)   },
+    ];
+    const clientRows: Array<{ label: string; value: string }> = [
+      { label: 'Cliente',   value: formatClientName(contactData.cliente) || '—' },
+      { label: 'Documento', value: formatClientDocument(contactData.cliente) || '—' },
+      { label: 'Email',     value: contactData.cliente?.email || '—' },
+      { label: 'Celular',   value: contactData.cliente?.telefono
+          ? formatPhone(contactData.cliente.telefono, contactData.cliente?.codigoPais || '+51')
+          : '—' },
+    ];
+    if (user) {
+      clientRows.push(
+        { label: 'Vendedor',       value: contactData.vendedor?.full_name || '—' },
+        { label: 'Email vendedor', value: contactData.vendedor?.email || '—' },
+      );
+    }
+
+    const rowH    = 8;
+    const titleH  = 8;
+    const maxRows = Math.max(lotRows.length, clientRows.length);
+    const cardH   = cardPad + titleH + maxRows * rowH + cardPad;
+
+    pdf.setFillColor(C.offWhite);
+    pdf.roundedRect(margin, yPos, contentWidth, cardH, 5, 5, 'F');
+    pdf.setDrawColor(C.border);
+    pdf.setLineWidth(0.4);
+    pdf.roundedRect(margin, yPos, contentWidth, cardH, 5, 5, 'D');
+    pdf.setDrawColor(C.border);
+    pdf.setLineWidth(0.3);
+    pdf.line(margin + colW + colGap / 2, yPos + 6, margin + colW + colGap / 2, yPos + cardH - 6);
+
+    const drawInfoCol = (rows: Array<{ label: string; value: string }>, colX: number, title: string) => {
+      let cy = yPos + cardPad;
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setTextColor(C.gold);
+      pdf.text(title.toUpperCase(), colX, cy);
+      cy += titleH;
+      rows.forEach(({ label, value }) => {
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(C.textLight);
+        pdf.text(label, colX, cy);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(C.textDark);
+        const lines = pdf.splitTextToSize(value, colW - 40) as string[];
+        pdf.text(lines[0] || '', colX + colW - cardPad, cy, { align: 'right', maxWidth: colW - 40 });
+        cy += rowH;
+      });
+    };
+
+    drawInfoCol(lotRows,    leftX,  'Información del Lote');
+    drawInfoCol(clientRows, rightX, 'Datos del Cliente');
+    yPos += cardH + 12;
+
+    // ── TABLA CRONOGRAMA ─────────────────────────────────────
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(13);
+    pdf.setTextColor(C.textDark);
+    pdf.text('Cronograma de Pago', margin, yPos);
+    yPos += 2;
+    pdf.setFillColor(C.gold);
+    pdf.rect(margin, yPos, 28, 0.8, 'F');
+    yPos += 8;
+
+    const cw = {
+      concepto:   contentWidth * 0.16,
+      fecha:      contentWidth * 0.40,
+      porcentaje: contentWidth * 0.20,
+      monto:      contentWidth * 0.24,
+    };
+    const cx = {
+      concepto:   margin,
+      fecha:      margin + cw.concepto,
+      porcentaje: margin + cw.concepto + cw.fecha,
+      monto:      margin + cw.concepto + cw.fecha + cw.porcentaje,
+    };
+    const rowH2   = 7;
+    const thH     = 8;
+
+    // Cabecera
+    pdf.setFillColor(C.tableHeader);
+    pdf.roundedRect(margin, yPos, contentWidth, thH, 3, 3, 'F');
+    pdf.rect(margin, yPos + thH - 3, contentWidth, 3, 'F');
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(8.5);
+    pdf.setTextColor(C.white);
+    const thY = yPos + 5.5;
+    pdf.text('Concepto',            cx.concepto   + cw.concepto   / 2, thY, { align: 'center' });
+    pdf.text('Fecha de Vencimiento',cx.fecha       + cw.fecha       / 2, thY, { align: 'center' });
+    pdf.text('Porcentaje',          cx.porcentaje  + cw.porcentaje  / 2, thY, { align: 'center' });
+    pdf.text('Monto',               cx.monto       + cw.monto       - 4,  thY, { align: 'right'  });
+    yPos += thH;
+
+    const tableStartY = yPos;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8.5);
+    let totalAmount = 0;
+    let isAlt = false;
+
+    schedule.forEach((item) => {
+      if (yPos > pageHeight - 35) { pdf.addPage(); yPos = 20; }
+      if (isAlt) {
+        pdf.setFillColor(C.tableAlt);
+        pdf.rect(margin, yPos, contentWidth, rowH2, 'F');
+      }
+      pdf.setTextColor(C.textMid);
+      const tdY = yPos + 4.8;
+      pdf.text(item.item,                        cx.concepto   + cw.concepto   / 2, tdY, { align: 'center' });
+      pdf.text(item.date,                        cx.fecha       + cw.fecha       / 2, tdY, { align: 'center' });
+      pdf.text(`${item.percentage.toFixed(2)}%`, cx.porcentaje  + cw.porcentaje  / 2, tdY, { align: 'center' });
+      pdf.text(formatAmount(item.amount),         cx.monto       + cw.monto       - 4,  tdY, { align: 'right'  });
+      yPos += rowH2;
+      isAlt = !isAlt;
+      totalAmount += item.amount || 0;
+    });
+
+    pdf.setDrawColor(C.border);
+    pdf.setLineWidth(0.4);
+    pdf.rect(margin, tableStartY - thH, contentWidth, schedule.length * rowH2 + thH);
+
+    // Fila TOTAL
+    pdf.setFillColor(C.tableHeader);
+    pdf.roundedRect(margin, yPos, contentWidth, rowH2 + 2, 3, 3, 'F');
+    pdf.rect(margin, yPos, contentWidth, 3, 'F');
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(9);
+    pdf.setTextColor(C.goldLight);
+    const totalY = yPos + 5.8;
+    pdf.text('TOTAL',                   cx.concepto   + cw.concepto   / 2, totalY, { align: 'center' });
+    pdf.text('100%',                    cx.porcentaje  + cw.porcentaje  / 2, totalY, { align: 'center' });
+    pdf.text(formatAmount(totalAmount), cx.monto       + cw.monto       - 4,  totalY, { align: 'right'  });
+    yPos += rowH2 + 2 + 10;
+
+    // ── VIGENCIA ─────────────────────────────────────────────
+    if (contactData?.validity?.days) {
+      pdf.setFillColor(C.offWhite);
+      pdf.roundedRect(margin, yPos, contentWidth, 10, 3, 3, 'F');
+      pdf.setDrawColor(C.gold);
+      pdf.setLineWidth(0.5);
+      pdf.roundedRect(margin, yPos, contentWidth, 10, 3, 3, 'D');
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.setTextColor(C.textMid);
+      pdf.text(
+        `Vigencia: ${contactData.validity.days} días — ${contactData.validity.from || ''} al ${contactData.validity.to || ''}.`,
+        pageWidth / 2, yPos + 6.5, { align: 'center' }
+      );
+      yPos += 18;
+    }
+
+    // ── NOTAS ────────────────────────────────────────────────
+    const noteFontSize = 9;
+    const noteLineH    = 4.8;
+    const noteSegs     = parseNotesHtmlToSegments(sanitizedNotesHtml);
+    const { lines: noteLines, totalHeight: noteTotalH } = layoutNoteSegmentsForPdf(
+      pdf, noteSegs, contentWidth - 10, noteLineH, noteFontSize
+    );
+    const notesBoxH = Math.max(18, (noteLines.length ? noteTotalH : noteLineH) + 10);
+    if (yPos + notesBoxH + 20 > pageHeight) { pdf.addPage(); yPos = 20; }
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(11);
+    pdf.setTextColor(C.textDark);
+    pdf.text('Notas', margin, yPos);
+    yPos += 2;
+    pdf.setFillColor(C.gold);
+    pdf.rect(margin, yPos, 10, 0.7, 'F');
+    yPos += 6;
+
+    pdf.setFillColor(C.white);
+    pdf.setDrawColor(C.border);
+    pdf.setLineWidth(0.4);
+    pdf.roundedRect(margin, yPos, contentWidth, notesBoxH, 4, 4, 'FD');
+    if (noteLines.length) {
+      drawNoteLines(pdf, noteLines, margin + 5, yPos + 6, noteLineH, noteFontSize, { text: C.textDark, link: '#1C5DBF' });
+    }
+
+    // ── FOOTER ───────────────────────────────────────────────
+    const footerY = pageHeight - 14;
+    pdf.setFillColor(C.navy);
+    pdf.rect(0, footerY, pageWidth, 14, 'F');
+    pdf.setFillColor(C.gold);
+    pdf.rect(0, footerY, pageWidth, 1.5, 'F');
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(C.goldLight);
+    pdf.text('Nautia Condominios — Documento generado digitalmente', margin, footerY + 8);
+    pdf.setTextColor(C.white);
+    pdf.text(new Date().toISOString().split('T')[0], pageWidth - margin, footerY + 8, { align: 'right' });
+
+    return pdf.output('blob');
+  };
+
+
+  // Función unificada para generar documento (PDF o HTML) con formato estándar
+  const generateDocument = async (contactData: any, format: 'pdf' | 'html' = 'pdf'): Promise<Blob> => {
+    try {
+      if (format === 'html') {
+        // Para HTML, usar el contenido directo (como antes)
+        const printContent = generatePrintContent(contactData);
+        const htmlBlob = new Blob([printContent], { type: 'text/html' });
+        return htmlBlob;
+      }
+
+      // Para PDF, usar jsPDF directamente con texto
+      return await generatePDFWithText(contactData);
+
+    } catch (error) {
+      console.error('Error generando documento:', error);
+      throw error;
+    }
+  };
+
+  // Función para capturar todos los datos actuales del estado
+  const captureCurrentData = (contactData: any) => {
+    return {
+      cliente: {
+        nombre: contactData.cliente?.nombre || '',
+        apellido: contactData.cliente?.apellido || '',
+        tipoDocumento: contactData.cliente?.tipoDocumento || '',
+        dni: contactData.cliente?.dni || '',
+        email: contactData.cliente?.email || '',
+        telefono: contactData.cliente?.telefono || '',
+        codigoPais: contactData.cliente?.codigoPais || '',
+      },
+      vendedor: {
+        id: contactData.vendedor?.id || '',
+        full_name: contactData.vendedor?.full_name || '',
+        email: contactData.vendedor?.email || '',
+      },
+      validity: {
+        days: contactData.validity?.days || 0,
+      },
+      schedule: schedule.map(item => ({
+        item: item.item || '',
+        date: item.date || '',
+        percentage: item.percentage || 0,
+        amount: item.amount || 0,
+      })),
+      discount: {
+        amount: discountAmount,
+        percentage: discountPercentage,
+      },
+      paymentMethod,
+      separation: {
+        amount: separation.amount,
+        percentage: separation.percentage,
+        enabled: separation.enabled,
+      },
+      initial: {
+        amount: initial.amount,
+        percentage: initial.percentage,
+      },
+      mortgageCredit: {
+        amount: mortgageCredit.amount,
+        percentage: mortgageCredit.percentage,
+      },
+      finalBalance: {
+        amount: finalBalance.amount,
+        percentage: finalBalance.percentage,
+        date: finalBalance.date,
+      },
+      numberOfInstallments,
+      equivalentInstallments,
+      firstPaymentDate,
+    };
+  };
+
+  // Función para comparar dos objetos de datos
+  const compareData = (data1: any, data2: any): boolean => {
+    if (!data1 || !data2) return false;
+    
+    // Comparar cliente
+    const cliente1 = data1.cliente || {};
+    const cliente2 = data2.cliente || {};
+    if (
+      cliente1.nombre !== cliente2.nombre ||
+      cliente1.apellido !== cliente2.apellido ||
+      cliente1.tipoDocumento !== cliente2.tipoDocumento ||
+      cliente1.dni !== cliente2.dni ||
+      cliente1.email !== cliente2.email ||
+      cliente1.telefono !== cliente2.telefono ||
+      cliente1.codigoPais !== cliente2.codigoPais
+    ) {
+      return false;
+    }
+
+    // Comparar vendedor
+    const vendedor1 = data1.vendedor || {};
+    const vendedor2 = data2.vendedor || {};
+    if (
+      vendedor1.id !== vendedor2.id ||
+      vendedor1.full_name !== vendedor2.full_name ||
+      vendedor1.email !== vendedor2.email
+    ) {
+      return false;
+    }
+
+    // Comparar vigencia
+    const validity1 = data1.validity || {};
+    const validity2 = data2.validity || {};
+    if (validity1.days !== validity2.days) {
+      return false;
+    }
+
+    // Comparar cronograma
+    const schedule1 = data1.schedule || [];
+    const schedule2 = data2.schedule || [];
+    if (schedule1.length !== schedule2.length) {
+      return false;
+    }
+    for (let i = 0; i < schedule1.length; i++) {
+      const item1 = schedule1[i];
+      const item2 = schedule2[i];
+      if (
+        item1.item !== item2.item ||
+        item1.date !== item2.date ||
+        Math.abs((item1.percentage || 0) - (item2.percentage || 0)) > 0.01 ||
+        Math.abs((item1.amount || 0) - (item2.amount || 0)) > 0.01
+      ) {
+        return false;
+      }
+    }
+
+    // Comparar descuento
+    const discount1 = data1.discount || {};
+    const discount2 = data2.discount || {};
+    if (
+      Math.abs((discount1.amount || 0) - (discount2.amount || 0)) > 0.01 ||
+      Math.abs((discount1.percentage || 0) - (discount2.percentage || 0)) > 0.01
+    ) {
+      return false;
+    }
+
+    // Comparar método de pago
+    if (data1.paymentMethod !== data2.paymentMethod) {
+      return false;
+    }
+
+    // Comparar separación
+    const separation1 = data1.separation || {};
+    const separation2 = data2.separation || {};
+    if (
+      Math.abs((separation1.amount || 0) - (separation2.amount || 0)) > 0.01 ||
+      Math.abs((separation1.percentage || 0) - (separation2.percentage || 0)) > 0.01 ||
+      separation1.enabled !== separation2.enabled
+    ) {
+      return false;
+    }
+
+    // Comparar inicial
+    const initial1 = data1.initial || {};
+    const initial2 = data2.initial || {};
+    if (
+      Math.abs((initial1.amount || 0) - (initial2.amount || 0)) > 0.01 ||
+      Math.abs((initial1.percentage || 0) - (initial2.percentage || 0)) > 0.01
+    ) {
+      return false;
+    }
+
+    // Comparar crédito hipotecario
+    const mortgageCredit1 = data1.mortgageCredit || {};
+    const mortgageCredit2 = data2.mortgageCredit || {};
+    if (
+      Math.abs((mortgageCredit1.amount || 0) - (mortgageCredit2.amount || 0)) > 0.01 ||
+      Math.abs((mortgageCredit1.percentage || 0) - (mortgageCredit2.percentage || 0)) > 0.01
+    ) {
+      return false;
+    }
+
+    // Comparar saldo final
+    const finalBalance1 = data1.finalBalance || {};
+    const finalBalance2 = data2.finalBalance || {};
+    if (
+      Math.abs((finalBalance1.amount || 0) - (finalBalance2.amount || 0)) > 0.01 ||
+      Math.abs((finalBalance1.percentage || 0) - (finalBalance2.percentage || 0)) > 0.01 ||
+      finalBalance1.date !== finalBalance2.date
+    ) {
+      return false;
+    }
+
+    // Comparar número de cuotas y otras configuraciones
+    if (
+      data1.numberOfInstallments !== data2.numberOfInstallments ||
+      data1.equivalentInstallments !== data2.equivalentInstallments ||
+      data1.firstPaymentDate !== data2.firstPaymentDate
+    ) {
+      return false;
+    }
+
+    return true;
+  };
+
+  // Función para guardar cotización en la API
+  const saveQuotationToAPI = async (contactData: any, quotationCode?: string) => {
+      try {
+      // Generar el PDF real usando el formato estándar
+      const pdfBlob = await generateDocument(contactData, 'pdf');
+      const finalFileName = getFileName(contactData, 'Cronograma', 'pdf', quotationCode);
+      
+      // Obtener el agente actual (vendedor logueado)
+      const currentAgent = user;
+      const agentId = currentAgent?.id || '68f5db6bd9c0deedd190e4ce'; // ID por defecto
+      
+      // Preparar los datos del formulario
+      const formData = new FormData();
+      
+      // Generar código único para la cotización si no se proporciona
+      const code = quotationCode || generateQuotationCode();
+      
+      formData.append('code', code);
+      formData.append('client', contactData.cliente?.nombre || '');
+      formData.append('email', contactData.cliente?.email || '');
+      formData.append('phone', contactData.cliente?.telefono || '');
+      formData.append('identification_number', contactData.cliente?.dni || '');
+      formData.append('lot_id', LOT_ID);
+      // Asegurar que agreed_price sea un número válido
+      const agreedPrice = loteData?.precio || 445000;
+      const validAgreedPrice = typeof agreedPrice === 'number' ? agreedPrice : parseFloat(agreedPrice) || 445000;
+      
+      // Asegurar que discount sea un número válido
+      const validDiscount = typeof discountPercentage === 'number' ? discountPercentage : parseFloat(discountPercentage) || 0;
+      
+      formData.append('agreed_price', validAgreedPrice.toString());
+      formData.append('discount', validDiscount.toString());
+      formData.append('project_id', PROJECT_ID);
+      formData.append('agent_id', agentId);
+      // Vigencia en días para la cotización
+      if (contactData?.validity?.days) {
+        formData.append('validity_days', String(contactData.validity.days));
+      }
+      formData.append('pdf_file', pdfBlob, finalFileName);
+
+      // Verificar que todos los campos requeridos estén presentes
+      const requiredFields = {
+        code: code,
+        client: contactData.cliente?.nombre || '',
+        email: contactData.cliente?.email || '',
+        phone: contactData.cliente?.telefono || '',
+        identification_number: contactData.cliente?.dni || '',
+        lot_id: LOT_ID,
+        agreed_price: (loteData?.precio || 445000).toString(),
+        discount: discountPercentage.toString(),
+        project_id: PROJECT_ID,
+        agent_id: agentId
+      };
+
+      if (Object.values(requiredFields).some(value => !value)) {
+        throw new Error('Todos los campos requeridos deben estar presentes');
+      }
+
+      // Preparar datos para console.log (FormData no es legible directamente)
+      const dataToSend = {
+        code: code,
+          client: contactData.cliente?.nombre || '',
+          email: contactData.cliente?.email || '',
+          phone: contactData.cliente?.telefono || '',
+          identification_number: contactData.cliente?.dni || '',
+          lot_id: LOT_ID,
+          agreed_price: validAgreedPrice,
+          discount: validDiscount,
+          project_id: PROJECT_ID,
+          agent_id: agentId,
+          validity_days: contactData?.validity?.days || 0,
+          pdf_file: {
+          name: finalFileName,
+            type: pdfBlob?.type,
+            size: pdfBlob?.size,
+          },
+      };
+
+      // Mostrar todos los datos que se envían al dashboard
+      console.log('========================================');
+      console.log('DATOS ENVIADOS AL DASHBOARD (COTIZACIÓN)');
+      console.log('========================================');
+      console.log('Endpoint:', `${BASE_API}/quotations`);
+      console.log('Método:', 'POST');
+      console.log('Datos enviados:', JSON.stringify(dataToSend, null, 2));
+      console.log('----------------------------------------');
+      console.log('Detalles de los datos:');
+      console.log('- Código de cotización:', dataToSend.code);
+      console.log('- Cliente:', dataToSend.client);
+      console.log('- Email:', dataToSend.email);
+      console.log('- Teléfono:', dataToSend.phone);
+      console.log('- Número de documento:', dataToSend.identification_number);
+      console.log('- ID del lote:', dataToSend.lot_id);
+      console.log('- Precio acordado:', dataToSend.agreed_price);
+      console.log('- Descuento:', dataToSend.discount);
+      console.log('- ID del proyecto:', dataToSend.project_id);
+      console.log('- ID del agente:', dataToSend.agent_id);
+      console.log('- Vigencia (días):', dataToSend.validity_days);
+      console.log('- Archivo PDF:', dataToSend.pdf_file.name, `(${dataToSend.pdf_file.size} bytes)`);
+      console.log('========================================');
+      
+      // Enviar a la API con cookies HTTP-only
+      const response = await fetch(`${BASE_API}/quotations`, {
+        method: 'POST',
+        headers: {
+          'ngrok-skip-browser-warning': 'true'
+        }, 
+        credentials: 'include',
+        body: formData
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        return result;
+      } else {
+        const errorData = await response.json();
+        console.error('Error al guardar cotización:', errorData);
+        console.error('Detalles del error:', errorData.detail);
+        
+        // Mostrar errores específicos de validación
+        let errorMessage = 'Error al guardar la cotización.';
+        if (errorData.detail && Array.isArray(errorData.detail)) {
+          errorMessage += '\n\nErrores de validación:\n' + errorData.detail.map((err: any) => 
+            `- ${err.loc ? err.loc.join('.') : 'Campo'}: ${err.msg || err.message || 'Error desconocido'}`
+          ).join('\n');
+        } else if (errorData.message) {
+          errorMessage += `\n\n${errorData.message}`;
+        }
+        
+        alert(errorMessage);
+        throw new Error(`Error ${response.status}: ${errorData.message || response.statusText}`);
+      }
+    } catch (error) {
+      console.error('Error al guardar cotización:', error);
+      alert('Error al guardar la cotización. Por favor, intente nuevamente.');
+      throw error;
+    }
+  };
+
+  const initializeQuotationDefaults = () => {
+    if (!firstPaymentDate) {
+      setFirstPaymentDate(format(addMonths(new Date(), 1), "dd/MM/yyyy"));
+    }
+    if (paymentMethod !== "credito_directo") return;
+    const priceAfterDiscount = Math.max(0, getBasePrice() - discountAmount);
+    if (numberOfInstallments <= 0) {
+      setNumberOfInstallments(12);
+    }
+    if (separation.amount === 0 && separation.percentage === 0) {
+      setSeparation({
+        amount: roundToTwoDecimals(priceAfterDiscount * 0.1),
+        percentage: 10,
+        enabled: true,
+      });
+    }
+    if (initial.amount === 0 && initial.percentage === 0) {
+      setInitial({
+        amount: roundToTwoDecimals(priceAfterDiscount * 0.2),
+        percentage: 20,
+      });
+    }
+  };
+
+
+
+  const handleQuotationClick = () => {
+    if (normalizedLotStatus !== "disponible") return;
+    initializeQuotationDefaults();
+    setShowQuotation(true);
+  };
+
+  const handleBackToLot = () => {
+    setShowQuotation(false);
+  };
+
+  const isLotAvailable = normalizedLotStatus === "disponible";
+
+  /*
+  const handleClearSchedule = () => {
+    
+    // Resetear todos los estados del cronograma
+    setSeparation({ amount: 0, percentage: 0, enabled: false });
+    setInitial({ amount: 0, percentage: 0 });
+    setMortgageCredit({ amount: 0, percentage: 0 });
+    setFinalBalance({ amount: 0, percentage: 0, date: "" });
+    setNumberOfInstallments(0);
+    setEquivalentInstallments(true);
+    setFirstPaymentDate("");
+    setSchedule([]);
+    setNeedsUpdate(false);
+    setDateError("");
+    // setCalculatedFinalDate("");
+    
+  };
+  */
+
+  // Funciones para los botones de funcionalidades
+  const handlePrint = () => {
+
+    // Generar o reutilizar código de cotización
+    const code = (hasBeenSaved && lastSavedData?.quotationCode) 
+      ? lastSavedData.quotationCode 
+      : generateQuotationCode();
+    setQuotationCodeForModal(code);
+    setModalType("print");
+    setShowContactModal(true);
+  };
+
+  const handleSave = () => {
+
+    // Generar o reutilizar código de cotización
+    const code = (hasBeenSaved && lastSavedData?.quotationCode) 
+      ? lastSavedData.quotationCode 
+      : generateQuotationCode();
+    setQuotationCodeForModal(code);
+    setModalType("save");
+    setShowContactModal(true);
+  };
+
+  const generatePrintContent = (contactData: any) => {
+    const totalAmount = schedule.reduce((sum, item) => sum + (item.amount || 0), 0);
+    const dateStr = new Date().toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric' });
+    return `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Cotizacion de Lote - Nautia Condominios</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111827; background: #fff; font-size: 13px; line-height: 1.5; }
+    @media print {
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      body { margin: 0; }
+      .pdf-footer { position: fixed; bottom: 0; left: 0; right: 0; }
+    }
+    .pdf-header { background: #0F1A2E; padding: 18px 32px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #C5A059; }
+    .pdf-header-logo img { height: 34px; width: auto; }
+    .pdf-header-brand { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+    .pdf-header-name { font-size: 20px; font-weight: 700; color: #fff; letter-spacing: 0.5px; }
+    .pdf-header-sub { font-size: 9px; color: #E9C176; font-weight: 500; letter-spacing: 1.5px; text-transform: uppercase; }
+    .pdf-body { padding: 24px 32px 90px; }
+    .pdf-title-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 3px; }
+    .pdf-title { font-size: 22px; font-weight: 700; color: #111827; }
+    .pdf-date { font-size: 11px; color: #6B7280; }
+    .pdf-divider { height: 3px; background: linear-gradient(to right, #C5A059, transparent); border-radius: 2px; margin-bottom: 20px; }
+    .info-card { display: grid; grid-template-columns: 1fr 1fr; background: #F7F8FA; border: 1px solid #E2E5EC; border-radius: 10px; overflow: hidden; margin-bottom: 24px; }
+    .info-col { padding: 16px 20px; }
+    .info-col + .info-col { border-left: 1px solid #E2E5EC; }
+    .info-col-title { font-size: 9px; font-weight: 700; color: #C5A059; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+    .info-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 7px; gap: 8px; }
+    .info-row:last-child { margin-bottom: 0; }
+    .info-label { font-size: 11px; font-weight: 600; color: #6B7280; white-space: nowrap; }
+    .info-value { font-size: 11px; font-weight: 500; color: #111827; text-align: right; word-break: break-word; }
+    .section-heading { margin-bottom: 10px; }
+    .section-heading h2 { font-size: 15px; font-weight: 700; color: #111827; }
+    .section-bar { height: 3px; width: 32px; background: #C5A059; border-radius: 2px; margin-top: 3px; }
+    .schedule-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+    .schedule-table thead tr { background: #1C284C !important; }
+    .schedule-table thead th { padding: 9px 10px; font-size: 11px; font-weight: 600; color: #fff !important; text-align: center; }
+    .schedule-table thead th:last-child { text-align: right; }
+    .schedule-table tbody tr:nth-child(even) { background: #F3F4F8; }
+    .schedule-table tbody td { padding: 8px 10px; font-size: 11px; color: #374151; text-align: center; border-bottom: 1px solid #E2E5EC; }
+    .schedule-table tbody td:last-child { text-align: right; }
+    .total-row { background: #1C284C !important; }
+    .total-row td { color: #E9C176 !important; font-weight: 700 !important; padding: 9px 10px !important; }
+    .validity-box { border: 1.5px solid #C5A059; border-radius: 8px; background: #FFFBF0; padding: 9px 14px; font-size: 11px; color: #374151; text-align: center; margin: 16px 0; }
+    .notes-section { margin-top: 20px; }
+    .notes-label { font-size: 10px; font-weight: 700; color: #374151; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 7px; }
+    .notes-box { border: 1px solid #E2E5EC; border-radius: 8px; padding: 10px 12px; background: #fff; min-height: 50px; font-size: 11px; color: #374151; line-height: 1.6; }
+    .pdf-footer { background: #0F1A2E; border-top: 2px solid #C5A059; padding: 7px 32px; display: flex; justify-content: space-between; align-items: center; }
+    .pdf-footer span { font-size: 9px; color: #E9C176; }
+  </style>
+</head>
+<body>
+  <div class="pdf-header">
+    <div class="pdf-header-logo">
+      <img src="/images/logo_mikonos.png" alt="Logo" onerror="this.style.display='none'" />
+    </div>
+    <div class="pdf-header-brand">
+      <div class="pdf-header-name">Nautia Condominios</div>
+      <div class="pdf-header-sub">Condominio Residencial Playa</div>
+    </div>
+  </div>
+  <div class="pdf-body">
+    <div class="pdf-title-row">
+      <h1 class="pdf-title">Cotizacion de Lote</h1>
+      <span class="pdf-date">${dateStr}</span>
+    </div>
+    <div class="pdf-divider"></div>
+    <div class="info-card">
+      <div class="info-col">
+        <div class="info-col-title">Informacion del Lote</div>
+        <div class="info-row"><span class="info-label">Lote</span><span class="info-value">${lotData.lot || '-'}</span></div>
+        <div class="info-row"><span class="info-label">Etapa</span><span class="info-value">${lotData.phase || '-'}</span></div>
+        <div class="info-row"><span class="info-label">Area</span><span class="info-value">${lotData.area || '-'}</span></div>
+        <div class="info-row"><span class="info-label">Precio</span><span class="info-value">${formatPrice(lotData.price)}</span></div>
+        <div class="info-row"><span class="info-label">Fecha cotizacion</span><span class="info-value">${new Date().toLocaleDateString()}</span></div>
+      </div>
+      <div class="info-col">
+        <div class="info-col-title">Datos del Cliente</div>
+        <div class="info-row"><span class="info-label">Cliente</span><span class="info-value">${formatClientName(contactData.cliente) || '-'}</span></div>
+        <div class="info-row"><span class="info-label">Documento</span><span class="info-value">${formatClientDocument(contactData.cliente) || '-'}</span></div>
+        <div class="info-row"><span class="info-label">Email</span><span class="info-value">${contactData.cliente?.email || '-'}</span></div>
+        <div class="info-row"><span class="info-label">Celular</span><span class="info-value">${contactData.cliente?.telefono ? formatPhone(contactData.cliente.telefono, contactData.cliente?.codigoPais || '+51') : '-'}</span></div>
+        ${user ? `
+        <div class="info-row"><span class="info-label">Vendedor</span><span class="info-value">${contactData.vendedor?.full_name || '-'}</span></div>
+        <div class="info-row"><span class="info-label">Email vendedor</span><span class="info-value">${contactData.vendedor?.email || '-'}</span></div>
+        ` : ''}
+      </div>
+    </div>
+    <div class="section-heading">
+      <h2>Cronograma de Pago</h2>
+      <div class="section-bar"></div>
+    </div>
+    <table class="schedule-table">
+      <thead>
+        <tr>
+          <th>Concepto</th>
+          <th>Fecha de Vencimiento</th>
+          <th>Porcentaje</th>
+          <th>Monto</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${schedule.map(item => `
+        <tr>
+          <td>${item.item}</td>
+          <td>${item.date}</td>
+          <td>${item.percentage.toFixed(2)}%</td>
+          <td>${formatAmount(item.amount)}</td>
+        </tr>`).join('')}
+        <tr class="total-row">
+          <td><strong>TOTAL</strong></td>
+          <td></td>
+          <td><strong>100%</strong></td>
+          <td><strong>${formatAmount(totalAmount)}</strong></td>
+        </tr>
+      </tbody>
+    </table>
+    ${contactData?.validity?.days ? `
+    <div class="validity-box">
+      Vigencia: <strong>${contactData.validity.days} dias</strong>
+      &mdash; desde ${contactData.validity.from || ''} hasta ${contactData.validity.to || ''}.
+    </div>` : ''}
+    <div class="notes-section">
+      <div class="notes-label">Notas</div>
+      <div class="notes-box">${sanitizedNotesHtml || '<span style="color:#9CA3AF">Sin notas adicionales</span>'}</div>
+    </div>
+  </div>
+  <div class="pdf-footer">
+    <span>Nautia Condominios &mdash; Documento generado digitalmente</span>
+    <span>${new Date().toISOString().split('T')[0]}</span>
+  </div>
+</body>
+</html>`;
+  };
+
+  // Función generatePDF eliminada - ahora todos usan generatePrintContent
+
+  const openPrintDialog = (contactData: any) => {
+    // Crear una ventana nueva con los datos de la cotización
+    const printWindow = window.open('', '_blank', 'width=800,height=600');
+    
+    if (printWindow) {
+      const printContent = generatePrintContent(contactData);
+      
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      
+      // Esperar a que se cargue el contenido y luego imprimir
+      printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+      };
+    }
+  };
+
+  // Función auxiliar para generar código de cotización
+  const generateQuotationCode = () => {
+    return `COT-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
+  };
+
+  // Función auxiliar para obtener el nombre del archivo
+  const getFileName = (contactData: any, defaultPrefix: string, extension: string, quotationCode?: string) => {
+    // Si hay nombre personalizado, usarlo
+    if (contactData.fileName && contactData.fileName.trim()) {
+      // Limpiar el nombre del archivo para remover caracteres no válidos y añadir extensión
+      const cleanedName = contactData.fileName.trim().replace(/[<>:"/\\|?*]/g, '_');
+      return `${cleanedName}.${extension}`;
+    }
+    // Si hay código de cotización, usarlo como nombre
+    if (quotationCode) {
+      return `${quotationCode}.${extension}`;
+    }
+    // Si no hay nombre personalizado ni código, usar el nombre por defecto
+    return `${defaultPrefix}_${lotData.lot}_${new Date().toISOString().split('T')[0]}.${extension}`;
+  };
+
+  const handleContactSubmit = async (contactData: any) => {
+    // Determinar si el usuario está logueado (agente comercial)
+    const isLoggedIn = !!user;
+    
+    // Capturar datos actuales
+    const currentData = captureCurrentData(contactData);
+    
+    // Verificar si los datos han cambiado
+    const dataHasChanged = !hasBeenSaved || !compareData(currentData, lastSavedData);
+    
+    // Generar código de cotización (se usará como nombre de archivo siempre)
+    // Prioridad: 1) código del modal, 2) código guardado si no hay cambios, 3) generar nuevo
+    let quotationCode: string | undefined = undefined;
+    if (quotationCodeForModal) {
+      quotationCode = quotationCodeForModal;
+    } else if (hasBeenSaved && !dataHasChanged && lastSavedData?.quotationCode) {
+      quotationCode = lastSavedData.quotationCode;
+    } else {
+      quotationCode = generateQuotationCode();
+    }
+    
+    // Si está logueado, verificar si debe guardar
+    let shouldSave = false;
+    if (isLoggedIn) {
+      if (dataHasChanged) {
+        // Hay cambios, debe guardar
+        shouldSave = true;
+      } else if (hasBeenSaved) {
+        // No hay cambios y ya se guardó antes, mostrar aviso
+        alert(`Este documento ya fue guardado anteriormente. No se guardará nuevamente en el dashboard.`);
+        shouldSave = false;
+      } else {
+        // Primera vez, debe guardar
+        shouldSave = true;
+      }
+    }
+    
+    switch (modalType) {
+      case "print": {
+        // Si debe guardar, guardar en BD antes de imprimir
+        if (shouldSave) {
+          try {
+            await saveQuotationToAPI(contactData, quotationCode);
+            // Marcar como guardado y guardar los datos (incluyendo el código)
+            setHasBeenSaved(true);
+            setLastSavedData({ ...currentData, quotationCode });
+          } catch (error) {
+            console.error('Error al guardar cotización en BD:', error);
+            // Continuar con la impresión aunque falle el guardado
+          }
+        }
+        
+        // Abrir diálogo de impresión con datos de la cotización
+        openPrintDialog(contactData);
+        break;
+      }
+        
+      case "save": {
+        try {
+          // Si debe guardar, guardar en BD
+          if (shouldSave) {
+            await saveQuotationToAPI(contactData, quotationCode);
+            // Marcar como guardado y guardar los datos (incluyendo el código)
+            setHasBeenSaved(true);
+            setLastSavedData({ ...currentData, quotationCode });
+          }
+          
+          // Generar y descargar el PDF
+          const pdfBlob = await generateDocument(contactData, 'pdf');
+          const url = URL.createObjectURL(pdfBlob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = getFileName(contactData, 'Cronograma', 'pdf', quotationCode);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        } catch (error) {
+          console.error('Error al procesar cotización:', error);
+          // Aún así, permitir descarga local del PDF
+          try {
+            const pdfBlob = await generateDocument(contactData, 'pdf');
+            const url = URL.createObjectURL(pdfBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = getFileName(contactData, 'Cronograma', 'pdf', quotationCode);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          } catch (pdfError) {
+            console.error('Error generando PDF local:', pdfError);
+            // Fallback a HTML si falla la generación de PDF
+            const printContent = generatePrintContent(contactData);
+            const blob = new Blob([printContent], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = getFileName(contactData, 'Cronograma', 'html', quotationCode);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          }
+        }
+        break;
+      }
+        
+      case "email": {
+        if (shouldSave) {
+          try {
+            await saveQuotationToAPI(contactData, quotationCode);
+            // Marcar como guardado y guardar los datos (incluyendo el código)
+            setHasBeenSaved(true);
+            setLastSavedData({ ...currentData, quotationCode });
+          } catch (error) {
+            console.error('Error al guardar cotización en BD:', error);
+            // Continuar con el flujo aunque falle el guardado
+          }
+        }
+
+        alert('Enviado con éxito');
+        break;
+      }
+    }
+  };
+
+  useEffect(() => {
+    // Resetear estados de guardado cuando cambia el lote o se cierra el modal
+    setHasBeenSaved(false);
+    setLastSavedData(null);
+    setQuotationCodeForModal(undefined);
+  }, [isVisible, loteData]);
+
+  // Asegurar que el modal tenga display: none cuando no es visible (especialmente para Firefox)
+  useEffect(() => {
+    const modalElement = document.getElementById("modalOverlay");
+    if (modalElement) {
+      if (!isVisible) {
+        // Esperar a que termine la animación antes de establecer display: none
+        const timer = setTimeout(() => {
+          if (modalElement.classList.contains("hide")) {
+            modalElement.style.display = "none";
+          }
+        }, 400); // Tiempo de la animación
+        return () => clearTimeout(timer);
+      } else {
+        // Cuando es visible, asegurar que no tenga display: none inline
+        modalElement.style.display = "";
+      }
+    }
+  }, [isVisible]);
+
+  return (
+    <div className={`lot-modal-overlay ${isVisible ? 'show' : 'hide'}`} id="modalOverlay">
+      <div className="lot-modal hud-glass-panel hud-gold-edge">
+        
+        {/* Información del lote */}
+        {!showQuotation && (
+        <div className="lot-modal-front">
+          <button className="lot-modal-close" onClick={handleClose}>
+            <span className="material-symbols-outlined">close</span>
+          </button>
+
+          <div className="lot-modal-header">
+            <div className="lot-modal-logo-container">
+              <span className="material-symbols-outlined lot-modal-logo-icon">domain</span>
+            </div>
+
+          </div>
+
+          <div className="lot-modal-content">
+            <div className="lot-identification">
+              <div className="lot-box">
+                <span id="modalLot">{lotData.lot}</span>
+              </div>
+              <div
+                className="lot-status-badge"
+                style={{
+                  backgroundColor: statusBadgeStyle.backgroundColor,
+                  color: statusBadgeStyle.color,
+                  border: `1px solid ${statusBadgeStyle.borderColor}`,
+                  boxShadow: `0 0 10px ${statusBadgeStyle.color}40`,
+                }}
+                id="modalStatus"
+              >
+                {statusLabel}
+              </div>
+            </div>
+
+            <div className="lot-property-details">
+              <div className="lot-detail-row">
+                <span className="lot-detail-label">Área del Lote</span>
+                <span className="lot-detail-value">{lotData.area}</span>
+              </div>
+              <div className="lot-detail-row">
+                <span className="lot-detail-label">Precio de Lista</span>
+                <span className="lot-detail-value price">{lotData.price}</span>
+              </div>
+            </div>
+
+
+            <div className="lot-buttons-container">
+              {!user && (
+                <button 
+                  className="lot-contact-btn" 
+                  onClick={handleWhatsAppClick}
+                  disabled={!isLotAvailable}
+                >
+                  <span className="material-symbols-outlined">chat</span>
+                  <span>Contactar</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="lot-whatsapp-btn"
+                style={{
+                  opacity: isLotAvailable ? 1 : 0.6,
+                  cursor: isLotAvailable ? "pointer" : "not-allowed",
+                }}
+                onClick={isLotAvailable ? handleQuotationClick : undefined}
+                disabled={!isLotAvailable}
+              >
+                <span className="material-symbols-outlined">calculate</span>
+                <span>{isLotAvailable ? "Cotizar Ahora" : "Lote no disponible"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        )}
+
+        {/* Cotizador */}
+        {showQuotation && (
+        <div className="lot-modal-quotation">
+          <button className="lot-modal-close" onClick={handleClose} type="button">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+          <button className="lot-modal-back-link" onClick={handleBackToLot} type="button">
+            <span className="material-symbols-outlined">arrow_back</span>
+            <span>Volver a Información</span>
+          </button>
+
+          <div className="lot-modal-content quotation-content">
+            <div className="quotation-header">
+              <div className="quotation-header-icon">
+                <span className="material-symbols-outlined">request_quote</span>
+              </div>
+              <div>
+                <h2 className="quotation-title">Cotizador</h2>
+                <p className="quotation-subtitle">
+                  {getLotWithoutPhase(lotData.lot)} · {lotData.phase || "1"}
+                </p>
+              </div>
+            </div>
+
+            <div className="quotation-summary-grid">
+              <div className="quotation-summary-card">
+                <span className="summary-label">Precio lista</span>
+                <span className="summary-value">{lotData.price}</span>
+              </div>
+              <div className="quotation-summary-card highlight">
+                <span className="summary-label">Descuento</span>
+                <span className="summary-value discount">
+                  -{formatMoney(discountAmount)}
+                  {discountPercentage > 0 && (
+                    <small> ({discountPercentage.toFixed(1)}%)</small>
+                  )}
+                </span>
+              </div>
+              <div className="quotation-summary-card total">
+                <span className="summary-label">Precio final</span>
+                <span className="summary-value">{formatMoney(finalPrice)}</span>
+              </div>
+            </div>
+
+            <section className="quotation-section">
+              <h3 className="section-title">
+                <span className="material-symbols-outlined">sell</span>
+                Descuentos
+              </h3>
+              {maxDiscount !== null && (
+                <p className="quotation-hint">
+                  Descuento máximo autorizado: {maxDiscount}%
+                </p>
+              )}
+              <div className="discount-presets">
+                {discountPresets.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    className={`discount-preset-btn ${
+                      Math.round(discountPercentage) === preset ? "active" : ""
+                    }`}
+                    onClick={() => applyDiscountFromPercentage(preset)}
+                  >
+                    {preset === 0 ? "Sin desc." : `${preset}%`}
+                  </button>
+                ))}
+              </div>
+              <div className="discount-inputs-row">
+                <div className="form-group">
+                  <label className="form-label">Porcentaje</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={getFormattedValue(discountPercentage, "percentage", "discount-percentage")}
+                    onFocus={() => handleInputFocus("discount-percentage")}
+                    onBlur={() =>
+                      handleDecimalBlur("discount-percentage", (percentage) => {
+                        applyDiscountFromPercentage(percentage);
+                      })
+                    }
+                    onChange={(e) => {
+                      handleDecimalInput(e.target.value, "discount-percentage", (percentage) => {
+                        const priceBase = getBasePrice();
+                        const amount = (percentage / 100) * priceBase;
+                        setDiscountPercentage(percentage);
+                        setDiscountAmount(amount);
+                        setNeedsUpdate(true);
+                      });
+                    }}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Monto USD</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={getFormattedValue(discountAmount, "usd", "discount-amount")}
+                    onFocus={() => handleInputFocus("discount-amount")}
+                    onBlur={() =>
+                      handleDecimalBlur("discount-amount", (amount) => {
+                        applyDiscountFromAmount(amount);
+                      })
+                    }
+                    onChange={(e) => {
+                      handleDecimalInput(e.target.value, "discount-amount", (amount) => {
+                        setDiscountAmount(amount);
+                        const pct = getBasePrice() ? (amount / getBasePrice()) * 100 : 0;
+                        setDiscountPercentage(pct);
+                        setNeedsUpdate(true);
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section className="quotation-section payment-schedule-section">
+              <h3 className="section-title">
+                <span className="material-symbols-outlined">payments</span>
+                Forma de Pago
+              </h3>
+
+              <div className="payment-method-cards">
+                <button
+                  type="button"
+                  className={`payment-method-card ${paymentMethod === "credito_directo" ? "active" : ""}`}
+                  onClick={() => handlePaymentMethodChange("credito_directo")}
+                >
+                  <span className="material-symbols-outlined">credit_score</span>
+                  <span className="payment-method-name">Crédito directo</span>
+                  <span className="payment-method-desc">Separación, inicial y cuotas</span>
+                </button>
+                <button
+                  type="button"
+                  className={`payment-method-card ${paymentMethod === "contado" ? "active" : ""}`}
+                  onClick={() => handlePaymentMethodChange("contado")}
+                >
+                  <span className="material-symbols-outlined">account_balance_wallet</span>
+                  <span className="payment-method-name">Contado</span>
+                  <span className="payment-method-desc">Pago único con descuento</span>
+                </button>
+              </div>
+
+              {paymentMethod === "credito_directo" && estimatedMonthlyPayment > 0 && (
+                <div className="installment-preview">
+                  <span className="material-symbols-outlined">calendar_month</span>
+                  <span>
+                    Cuota estimada: <strong>{formatMoney(estimatedMonthlyPayment)}</strong>
+                    {numberOfInstallments > 0 && ` × ${numberOfInstallments} meses`}
+                  </span>
+                </div>
+              )}
+              
+              <div className="payment-form">
+
+                {paymentMethod === "credito_directo" && (
+                  <>
+                    <div className="form-group">
+                      <label className="form-label">Separación</label>
+                      <div className="input-group">
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="Monto USD"
+                          value={getFormattedValue(separation.amount, 'usd', 'separation-amount-directo')}
+                          onFocus={() => handleInputFocus('separation-amount-directo')}
+                          onBlur={() => handleDecimalBlur('separation-amount-directo', (amount) => {
+                            const percentage = (amount / ((loteData?.precio || 0) - discountAmount)) * 100;
+                            setSeparation({ amount, percentage, enabled: true });
+                            setNeedsUpdate(true);
+                          })}
+                          onChange={(e) => {
+                            handleDecimalInput(e.target.value, 'separation-amount-directo', (amount) => {
+                              setSeparation({ ...separation, amount, enabled: true });
+                              setNeedsUpdate(true);
+                            });
+                          }}
+                        />
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="Porcentaje %"
+                          value={getFormattedValue(separation.percentage, 'percentage', 'separation-percentage-directo')}
+                          onFocus={() => handleInputFocus('separation-percentage-directo')}
+                          onBlur={() => handleDecimalBlur('separation-percentage-directo', (percentage) => {
+                            const amount = (percentage / 100) * ((loteData?.precio || 0) - discountAmount);
+                            setSeparation({ amount, percentage, enabled: true });
+                            setNeedsUpdate(true);
+                          })}
+                          onChange={(e) => {
+                            handleDecimalInput(e.target.value, 'separation-percentage-directo', (percentage) => {
+                              setSeparation({ ...separation, percentage, enabled: true });
+                              setNeedsUpdate(true);
+                            });
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Cuota Inicial</label>
+                      <div className="input-group">
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={getFormattedValue(initial.amount, 'usd', 'initial-amount-directo')}
+                          onFocus={() => handleInputFocus('initial-amount-directo')}
+                          onBlur={() => handleDecimalBlur('initial-amount-directo', (amount) => {
+                            const percentage = (amount / ((loteData?.precio || 0) - discountAmount)) * 100;
+                            setInitial({ amount, percentage });
+                            setNeedsUpdate(true);
+                          })}
+                          onChange={(e) => {
+                            handleDecimalInput(e.target.value, 'initial-amount-directo', (amount) => {
+                              setInitial({ ...initial, amount });
+                              setNeedsUpdate(true);
+                            });
+                          }}
+                        />
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={getFormattedValue(initial.percentage, 'percentage', 'initial-percentage-directo')}
+                          onFocus={() => handleInputFocus('initial-percentage-directo')}
+                          onBlur={() => handleDecimalBlur('initial-percentage-directo', (percentage) => {
+                            const amount = (percentage / 100) * ((loteData?.precio || 0) - discountAmount);
+                            setInitial({ amount, percentage });
+                            setNeedsUpdate(true);
+                          })}
+                          onChange={(e) => {
+                            handleDecimalInput(e.target.value, 'initial-percentage-directo', (percentage) => {
+                              setInitial({ ...initial, percentage });
+                              setNeedsUpdate(true);
+                            });
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">N° de Cuotas</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={getFormattedValue(numberOfInstallments, 'cuotas', 'number-of-installments')}
+                        onFocus={() => handleInputFocus('number-of-installments')}
+                        onBlur={() => handleInputBlur('number-of-installments')}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0;
+                          setNumberOfInstallments(value);
+                          setNeedsUpdate(true);
+                        }}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Fecha del Primer Pago</label>
+                      <input
+                        type="date"
+                        className={`date-input ${dateError ? "error" : ""}`}
+                        value={toDateInputValue(firstPaymentDate)}
+                        onChange={(e) => handleDateChange(fromDateInputValue(e.target.value))}
+                      />
+                      {dateError && <div className="error-message">{dateError}</div>}
+                    </div>
+                  </>
+                )}
+
+                {paymentMethod === "contado" && (
+                  <div className="form-group">
+                    <label className="form-label">Fecha de Pago Final</label>
+                    <input
+                      type="date"
+                      className="date-input"
+                      value={toDateInputValue(finalBalance.date)}
+                      onChange={(e) => setFinalBalance({ ...finalBalance, date: fromDateInputValue(e.target.value) })}
+                    />
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  className="generate-schedule-btn"
+                  onClick={needsUpdate ? updateSchedule : generateSchedule}
+                  disabled={(paymentMethod !== "contado" && (!firstPaymentDate || numberOfInstallments === 0)) || !!dateError}
+                >
+                  {needsUpdate ? "Actualizar Cronograma" : "Generar Cronograma"}
+                </button>
+              </div>
+            </section>
+
+            {schedule.length > 0 && (
+              <div className="schedule-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Fecha</th>
+                      <th>%</th>
+                      <th style={{ textAlign: 'right' }}>Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {schedule.map((item, index) => (
+                      <tr key={index}>
+                        <td>{item.item}</td>
+                        <td>{item.date}</td>
+                        <td>{item.percentage.toFixed(1)}%</td>
+                        <td style={{ textAlign: 'right' }}>${item.amount.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="function-buttons">
+              <button type="button" className="function-btn" onClick={handlePrint}>
+                <span className="material-symbols-outlined">print</span>
+                Imprimir
+              </button>
+              <button type="button" className="function-btn" onClick={handleSave}>
+                <span className="material-symbols-outlined">save</span>
+                Guardar
+              </button>
+            </div>
+
+            <button type="button" className="quotation-back-bottom-btn" onClick={handleBackToLot}>
+              <span className="material-symbols-outlined">arrow_back</span>
+              Volver a información del lote
+            </button>
+          </div>
+        </div>
+        )}
+      </div>
+
+      <ContactModal
+        isVisible={showContactModal}
+        type={modalType}
+        onClose={() => setShowContactModal(false)}
+        onSubmit={handleContactSubmit}
+        currentUser={user}
+        quotationCode={quotationCodeForModal}
+      />
+
+      {toastMessage && (
+        <div className="lot-toast-message">
+          <span className="material-symbols-outlined">warning</span>
+          <span>{toastMessage}</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default LotInfoModal;

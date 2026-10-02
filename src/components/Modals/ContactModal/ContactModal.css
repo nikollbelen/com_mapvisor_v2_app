@@ -1,0 +1,417 @@
+/* =========================================
+   Contact Modal — Dark Premium (tema del proyecto)
+   Mismo estilo que LotInfoModal
+   ========================================= */
+
+/* ---------- Overlay ---------- */
+.contact-modal-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 99999;          /* Por encima de todo (LotInfoModal usa 9999) */
+  pointer-events: all;     /* CRÍTICO: capturar todos los eventos */
+  animation: contactFadeIn 0.25s ease-out;
+}
+
+/* ---------- Card ---------- */
+.contact-modal {
+  background: rgba(30, 32, 32, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  border-top: 1px solid rgba(197, 160, 89, 0.4);
+  border-left: 1px solid rgba(197, 160, 89, 0.4);
+  border-radius: 24px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7),
+              0 0 60px rgba(197, 160, 89, 0.08);
+  max-width: 500px;
+  width: 90%;
+  max-height: 85vh;
+  overflow-y: auto;
+  color: #ffffff;
+  pointer-events: all;     /* CRÍTICO */
+  position: relative;
+  animation: contactSlideIn 0.3s cubic-bezier(0.34, 1.2, 0.64, 1);
+
+  scrollbar-width: thin;
+  scrollbar-color: rgba(197, 160, 89, 0.3) transparent;
+}
+.contact-modal::-webkit-scrollbar { width: 5px; }
+.contact-modal::-webkit-scrollbar-track { background: transparent; }
+.contact-modal::-webkit-scrollbar-thumb {
+  background: rgba(197, 160, 89, 0.3);
+  border-radius: 10px;
+}
+
+/* ---------- Header ---------- */
+.contact-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 24px 18px;
+  position: relative;
+}
+
+.contact-modal-title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #ffffff;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  text-align: center;
+}
+
+.contact-modal-close {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  color: #e9c176;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  pointer-events: all;
+}
+.contact-modal-close:hover {
+  background: rgba(197, 160, 89, 0.15);
+  transform: translateY(-50%) rotate(90deg);
+}
+
+.contact-modal-divider {
+  width: calc(100% - 48px);
+  height: 1px;
+  background: rgba(197, 160, 89, 0.15);
+  margin: 0 24px;
+}
+
+/* ---------- Content ---------- */
+.contact-modal-content {
+  padding: 22px 24px;
+}
+
+/* ---------- Badge vendedor ---------- */
+.contact-seller-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(197, 160, 89, 0.08);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  border-radius: 14px;
+}
+.contact-seller-badge .seller-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e9c176, #c5a059);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #412d00;
+  font-size: 0.75rem;
+  font-weight: 800;
+  flex-shrink: 0;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+.contact-seller-badge .seller-info strong {
+  display: block;
+  font-weight: 600;
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-family: 'Manrope', sans-serif;
+}
+.contact-seller-badge .seller-info span {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: 'Manrope', sans-serif;
+}
+
+/* ---------- Form ---------- */
+.contact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #e9c176;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-family: 'Manrope', sans-serif;
+  margin-bottom: 12px;
+}
+.form-section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(197, 160, 89, 0.2);
+}
+
+/* Grid 2 columnas */
+.cm-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 14px;
+}
+
+/* Campo */
+.cm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cm-field.full-width {
+  grid-column: 1 / -1;
+}
+
+.input-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.04em;
+  font-family: 'Manrope', sans-serif;
+  text-transform: uppercase;
+}
+
+/* Input base — oscuro */
+.form-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 11px;
+  font-size: 0.875rem;
+  font-family: 'Manrope', sans-serif;
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  outline: none;
+  pointer-events: all;       /* CRÍTICO */
+  -webkit-user-select: text;
+  user-select: text;
+}
+.form-input::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+.form-input:focus {
+  border-color: rgba(233, 193, 118, 0.6);
+  background: rgba(233, 193, 118, 0.06);
+  box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.12);
+}
+.form-input:hover:not(:focus):not(:read-only) {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.07);
+}
+.form-input.error {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.06);
+}
+.form-input.error:focus {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+}
+.form-input:read-only {
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.4);
+  cursor: default;
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Select */
+select.form-input {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23e9c176' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+  cursor: pointer;
+  pointer-events: all;
+}
+select.form-input option {
+  background: #1e2020;
+  color: #ffffff;
+}
+select.form-input option:checked {
+  background: #c5a059;
+  color: #412d00;
+}
+
+/* Error message */
+.error-message {
+  font-size: 0.7rem;
+  color: #f87171;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Manrope', sans-serif;
+}
+
+/* Sufijo (días) */
+.input-suffix-wrap {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 11px;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  pointer-events: all;
+}
+.input-suffix-wrap:focus-within {
+  border-color: rgba(233, 193, 118, 0.6);
+  box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.12);
+}
+.input-suffix-wrap .form-input {
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  flex: 1;
+}
+.input-suffix {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(197, 160, 89, 0.08);
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.8rem;
+  color: #e9c176;
+  font-weight: 600;
+  font-family: 'Manrope', sans-serif;
+  white-space: nowrap;
+}
+
+/* Nota nombre de archivo */
+.cm-filename-note {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.35);
+  font-family: 'Manrope', sans-serif;
+  margin-top: 2px;
+}
+
+/* ---------- Footer ---------- */
+.contact-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 24px 22px;
+  pointer-events: all;
+}
+
+.contact-modal .btn-secondary {
+  padding: 10px 22px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: 'Manrope', sans-serif;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  pointer-events: all;
+}
+.contact-modal .btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.contact-modal .btn-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  background: linear-gradient(135deg, #e9c176 0%, #c5a059 100%);
+  color: #412d00;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 15px rgba(197, 160, 89, 0.25);
+  pointer-events: all;
+}
+.contact-modal .btn-primary:hover {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(197, 160, 89, 0.35);
+}
+.contact-modal .btn-primary:active {
+  transform: translateY(0);
+}
+
+/* ---------- Animaciones ---------- */
+@keyframes contactFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes contactSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ---------- Responsive Mobile ---------- */
+@media (max-width: 1024px) {
+  .contact-modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .contact-modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top, 0px)));
+    border-radius: 20px 20px 0 0;
+    border-bottom: none;
+    animation: contactSlideInMobile 0.32s cubic-bezier(0.34, 1.1, 0.64, 1);
+  }
+
+  .cm-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 12px;
+  }
+
+  .contact-modal-header,
+  .contact-modal-content,
+  .contact-modal-footer {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+@keyframes contactSlideInMobile {
+  from { opacity: 0; transform: translateY(40px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

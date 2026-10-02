@@ -1,0 +1,331 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&family=Manrope:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+
+@font-face {
+  font-family: "Helvetica Neue";
+  src: url("/font/HelveticaNeueRegular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Helvetica Neue";
+  src: url("/font/HelveticaNeueBold.otf") format("opentype");
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Reset básico sin afectar Cesium */
+html, body {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  color: var(--text-color);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===== SCROLLBAR PERSONALIZADO ===== */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  transition: background 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+}
+
+/* ===== VARIABLES CSS GLOBALES ===== */
+:root {
+  /* Colores de texto */
+  --text-color: #1a202c;
+  --text-secondary: #4a5568;
+  --text-on-green: #ffffff;
+  
+  /* Colores de fondo (Light Premium Glassmorphism) */
+  --primary-green: #10b981;
+  --primary-green-hover: #059669;
+  --glass-bg: rgba(255, 255, 255, 0.75);
+  --glass-bg-solid: #ffffff;
+  --glass-bg-light: rgba(255, 255, 255, 0.45);
+  --glass-bg-green: rgba(16, 185, 129, 0.15);
+  
+  /* Colores de borde (Soft Material Borders) */
+  --glass-border: rgba(0, 0, 0, 0.12);
+  --glass-border-light: rgba(0, 0, 0, 0.06);
+  --glass-border-green: #10b981;
+  
+  /* Sombras (Material 3 Elevation) */
+  --shadow-dark: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --shadow-medium: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-light: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  
+  /* Transiciones */
+  --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: all 0.2s ease-in-out;
+  --blur-amount: 15px;
+}
+
+/* ===== LOGO TEXTO PREMIUM ===== */
+.project-text-logo {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: #fff;
+  letter-spacing: 1px;
+  text-transform: none;
+  margin: 0;
+  text-align: center;
+  line-height: 1.2;
+  background: linear-gradient(135deg, #fff 0%, #1DB779 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+}
+
+.project-text-logo.large {
+  font-size: 2.5rem;
+  letter-spacing: 3px;
+}
+
+.project-text-logo.medium {
+  font-size: 1.5rem;
+}
+
+/* Estilos específicos para tu app */
+
+#cesiumContainer {
+  height: 100vh;
+  width: 100vw;
+}
+
+.cesium-viewer-bottom,
+.cesium-widget-credits,
+.cesium-credit-textContainer,
+.cesium-credit-imageContainer {
+  display: none !important;
+}
+
+/* ===== CLASES UTILITARIAS GLOBALES ===== */
+
+.background-container {
+  background-color: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-amount));
+  -webkit-backdrop-filter: blur(var(--blur-amount));
+  border-radius: 1.25rem;
+  box-shadow: var(--shadow-dark);
+}
+
+.background-light-container {
+  background-color: var(--glass-bg-light);
+  border-radius: 1.25rem;
+}
+
+.border-container {
+  border: 1px solid var(--glass-border);
+}
+
+.background-btn {
+  background-color: var(--primary-green) !important;
+  color: var(--text-on-green) !important;
+  border: none !important;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  box-shadow: var(--shadow-medium);
+  transition: var(--transition-smooth);
+}
+
+.background-btn:hover {
+  background-color: var(--primary-green-hover) !important;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-dark);
+}
+
+.close-btn {
+  background: var(--glass-bg-solid);
+  border: 1px solid var(--glass-border);
+  color: var(--text-color);
+  font-size: 1.25rem;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  border-radius: 50%;
+  z-index: 10000;
+  box-shadow: var(--shadow-medium);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-smooth);
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+}
+
+.close-btn:hover {
+  background-color: #f8fafc;
+  transform: scale(1.1) rotate(90deg);
+  box-shadow: var(--shadow-dark);
+}
+
+.btn {
+  background-color: var(--glass-bg-light);
+  border: 1px solid var(--glass-border);
+  color: var(--text-color);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  font-weight: 500;
+  transition: var(--transition-fast);
+}
+
+.btn:hover {
+  background-color: var(--glass-bg);
+  border-color: var(--text-secondary);
+  box-shadow: var(--shadow-medium);
+}
+
+/* ===== ANIMACIONES ===== */
+.show {
+  animation: showModal 0.4s ease-in-out forwards;
+}
+
+@keyframes showModal {
+  0% {
+    display: none;
+    opacity: 0;
+  }
+  1% {
+    display: flex;
+    opacity: 0;
+  }
+  100% {
+    display: flex;
+    opacity: 1;
+  }
+}
+
+.hide {
+  animation: hideModal 0.4s ease-in-out forwards;
+  display: none !important; /* Firefox necesita display: none explícito */
+}
+
+@keyframes hideModal {
+  0% {
+    display: flex;
+    opacity: 1;
+  }
+  99% {
+    display: flex;
+    opacity: 0;
+  }
+  100% {
+    display: none;
+    opacity: 0;
+  } 
+}
+
+/* ===== ESTILOS GLOBALES PARA DROPDOWNS (SELECT) ===== */
+/* Normalizar estilos de select entre navegadores */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  color-scheme: dark;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  cursor: pointer;
+  pointer-events: all;
+  position: relative;
+  z-index: 1;
+}
+
+/* Estilos para opciones de select */
+select option {
+  background: white !important;
+  color: #1a202c !important;
+  padding: 10px 14px;
+}
+
+select option:checked {
+  background: var(--primary-green) !important;
+  color: white !important;
+}
+
+select option:hover,
+select option:focus {
+  background: #f1f5f9 !important;
+}
+
+/* Firefox específico - Mejoras para compatibilidad */
+@-moz-document url-prefix() {
+  select {
+    background-image: none;
+    cursor: pointer;
+    pointer-events: all;
+    -moz-appearance: none;
+  }
+  
+  select option {
+    background-color: #1a1a1a !important;
+    color: white !important;
+  }
+  
+  select option:checked,
+  select option:hover {
+    background-color: #10b981 !important;
+    color: white !important;
+  }
+  
+  /* Asegurar que el select sea clickeable en Firefox */
+  select:not(:disabled) {
+    pointer-events: auto;
+  }
+}
+
+/* Webkit (Chrome, Safari, Edge) específico */
+select::-ms-expand {
+  display: none;
+}
+
+
+/* ===== MATERIAL SYMBOLS & UTILITIES ===== */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+
+.text-gold { color: #e9c176; }

@@ -1,0 +1,157 @@
+/* ========================================
+   INSTRUCTIONS - SCOPED PREMIUM STYLES
+   Match exact design from HTML files
+   ======================================== */
+
+.instructions-main-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 1;
+  transition: opacity 0.5s ease-out;
+  background-color: rgba(14, 14, 14, 0.85); /* Slightly darker for better contrast with the new design */
+  backdrop-filter: blur(10px);
+}
+
+.instructions-fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Shared components scoped for Instructions */
+.instructions-glass-panel {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(197, 160, 89, 0.3);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  animation: instructionsFadeInUp 0.6s ease-out forwards;
+}
+
+.instructions-inner-glow {
+  box-shadow: inset 1px 1px 0px rgba(197, 160, 89, 0.3);
+}
+
+.instructions-gold-glow {
+  box-shadow: 0 0 15px rgba(233, 193, 118, 0.4);
+}
+
+.instructions-gradient-gold {
+  background: linear-gradient(135deg, #e9c176 0%, #c5a059 100%);
+}
+
+.instructions-gold-gradient-bg {
+  background: linear-gradient(135deg, #e9c176 0%, #c5a059 100%);
+}
+
+.instructions-card {
+  opacity: 0;
+  animation: instructionsFadeInUp 0.5s ease-out forwards;
+}
+
+.instructions-card:nth-child(1) { animation-delay: 0.2s; }
+.instructions-card:nth-child(2) { animation-delay: 0.3s; }
+.instructions-card:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes instructionsFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Ensure Material Symbols match design weights */
+.instructions-main-overlay .material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+}
+
+/* ---- Mobile (≤1024px, layout vertical) ---- */
+.instructions-mobile-main {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top, 0px))
+    max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
+}
+
+.instructions-mobile-panel {
+  width: 100%;
+  max-width: min(400px, 100%);
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  box-sizing: border-box;
+}
+
+.instructions-mobile-panel .instructions-mobile-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.instructions-mobile-gestures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.instructions-mobile-gesture-card {
+  min-width: 0;
+}
+
+.instructions-mobile-gesture-card p {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 1024px) {
+  .instructions-main-overlay {
+    align-items: flex-start;
+    justify-content: flex-start;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    background-color: rgba(0, 0, 0, 0.62);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .instructions-mobile-panel {
+    background: rgba(14, 16, 16, 0.96) !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .instructions-mobile-panel {
+    padding: 16px 12px;
+    gap: 20px;
+  }
+
+  .instructions-mobile-gestures {
+    gap: 8px;
+  }
+
+  .instructions-mobile-gesture-card {
+    padding: 12px 8px !important;
+  }
+}

@@ -1,0 +1,96 @@
+/* Contenido — shell en HudPanelModal.css */
+
+.areas-modal-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.areas-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.areas-card {
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  transition: all 0.3s ease;
+}
+
+.areas-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(233, 193, 118, 0.3);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+}
+
+.areas-card-image {
+  height: 140px;
+  width: 100%;
+  background-size: cover;
+  background-position: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.areas-card-content {
+  padding: 16px;
+}
+
+.areas-card-title {
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: #e2e2e2;
+  margin-bottom: 16px;
+}
+
+.areas-card-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.areas-btn-primary,
+.areas-btn-secondary {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  font-family: "Manrope", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.areas-btn-primary {
+  background: linear-gradient(135deg, #e9c176 0%, #c5a059 100%);
+  color: #121414;
+  border: none;
+}
+
+.areas-btn-primary:hover {
+  opacity: 0.9;
+  transform: scale(1.02);
+}
+
+.areas-btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e2e2;
+}
+
+.areas-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e9c176;
+}
+
+.areas-no-data {
+  text-align: center;
+  color: #9a8f80;
+  padding: 40px 0;
+  font-family: "Manrope", sans-serif;
+}

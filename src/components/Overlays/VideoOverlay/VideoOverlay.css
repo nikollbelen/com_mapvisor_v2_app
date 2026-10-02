@@ -1,0 +1,54 @@
+/* ========================================
+   OVERLAY VIDEO
+   ======================================== */
+.video-overlay-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 998;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.video-overlay-background.show {
+  opacity: 1;
+}
+
+.video-overlay {
+  max-width: 90vw;
+  max-height: 90vh;
+  position: relative;
+  background: #000;
+  border-radius: 20px;
+  display: inline-block;
+}
+
+.video-overlay video {
+  width: auto;
+  height: auto;
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: 20px;
+  display: block;
+}
+
+@media (max-width: 1024px) {
+  .video-overlay-background {
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+      env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+    box-sizing: border-box;
+  }
+
+  .video-overlay,
+  .video-overlay video {
+    max-width: 100vw;
+    max-height: min(85dvh, calc(100dvh - 32px));
+    border-radius: 12px;
+  }
+}

@@ -1,0 +1,396 @@
+/* ========================================
+   MODAL AGREGAR LOTE — HUD GLASS STYLE
+   ======================================== */
+
+.add-lot-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 10100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: addLotOverlayIn 0.2s ease-out;
+}
+
+@keyframes addLotOverlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.add-lot-modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  background: rgba(24, 26, 26, 0.96);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(197, 160, 89, 0.25);
+  border-top: 1px solid rgba(197, 160, 89, 0.45);
+  border-left: 1px solid rgba(197, 160, 89, 0.35);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255,255,255,0.04) inset;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: addLotModalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes addLotModalIn {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Header */
+.add-lot-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid rgba(197, 160, 89, 0.12);
+  flex-shrink: 0;
+}
+
+.add-lot-header-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(233, 193, 118, 0.1);
+  border: 1px solid rgba(233, 193, 118, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.add-lot-header-icon .material-symbols-outlined {
+  font-size: 22px;
+  color: #e9c176;
+  font-variation-settings: 'FILL' 1;
+}
+
+.add-lot-header-text {
+  flex: 1;
+}
+
+.add-lot-title {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 2px;
+}
+
+.add-lot-subtitle {
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  margin: 0;
+}
+
+.add-lot-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.add-lot-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.add-lot-close .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.add-lot-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Body */
+.add-lot-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(197, 160, 89, 0.3) transparent;
+}
+
+.add-lot-body::-webkit-scrollbar {
+  width: 4px;
+}
+.add-lot-body::-webkit-scrollbar-track { background: transparent; }
+.add-lot-body::-webkit-scrollbar-thumb {
+  background: rgba(197, 160, 89, 0.3);
+  border-radius: 4px;
+}
+
+/* Form sections */
+.add-lot-section-label {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #e9c176;
+  margin: 4px 0 8px;
+}
+
+.add-lot-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.add-lot-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.add-lot-field.full {
+  grid-column: 1 / -1;
+}
+
+.add-lot-label {
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.add-lot-input,
+.add-lot-select,
+.add-lot-textarea {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: #ffffff;
+  font-family: 'Manrope', sans-serif;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s ease, background 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.add-lot-input:focus,
+.add-lot-select:focus,
+.add-lot-textarea:focus {
+  border-color: rgba(197, 160, 89, 0.6);
+  background: rgba(197, 160, 89, 0.05);
+}
+
+.add-lot-input::placeholder,
+.add-lot-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.add-lot-select {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+
+.add-lot-select option {
+  background: #1e2020;
+  color: #ffffff;
+}
+
+.add-lot-textarea {
+  min-height: 140px;
+  resize: vertical;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Coordinates hint */
+.add-lot-coords-hint {
+  font-family: 'Manrope', sans-serif;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  line-height: 1.5;
+  margin-top: 2px;
+}
+
+.add-lot-coords-hint code {
+  background: rgba(255, 255, 255, 0.07);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: rgba(233, 193, 118, 0.8);
+  font-size: 11px;
+}
+
+/* Error / info states */
+.add-lot-field-error {
+  font-family: 'Manrope', sans-serif;
+  font-size: 11px;
+  color: #ff6b6b;
+  margin-top: 2px;
+}
+
+.add-lot-coords-preview {
+  background: rgba(197, 160, 89, 0.06);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.add-lot-coords-preview strong {
+  color: #e9c176;
+}
+
+/* Divider */
+.add-lot-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 4px 0;
+}
+
+/* Footer */
+.add-lot-footer {
+  display: flex;
+  gap: 10px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid rgba(197, 160, 89, 0.1);
+  flex-shrink: 0;
+}
+
+.add-lot-btn-cancel {
+  flex: 0 0 auto;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.6);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.add-lot-btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.add-lot-btn-submit {
+  flex: 1;
+  height: 44px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #c5a059 0%, #e9c176 100%);
+  border: none;
+  color: #111;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 16px rgba(197, 160, 89, 0.25);
+}
+
+.add-lot-btn-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(197, 160, 89, 0.4);
+}
+
+.add-lot-btn-submit:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.add-lot-btn-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.add-lot-btn-submit .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* Status messages */
+.add-lot-status {
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.add-lot-status.success {
+  background: rgba(72, 199, 142, 0.12);
+  border: 1px solid rgba(72, 199, 142, 0.25);
+  color: #48c78e;
+}
+
+.add-lot-status.error {
+  background: rgba(255, 107, 107, 0.1);
+  border: 1px solid rgba(255, 107, 107, 0.25);
+  color: #ff6b6b;
+}
+
+.add-lot-status .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* Mobile adjustments */
+@media (max-width: 640px) {
+  .add-lot-modal {
+    max-height: 92vh;
+    border-radius: 16px;
+  }
+
+  .add-lot-header {
+    padding: 16px 16px 14px;
+  }
+
+  .add-lot-body {
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .add-lot-footer {
+    padding: 14px 16px 16px;
+  }
+
+  .add-lot-row {
+    grid-template-columns: 1fr;
+  }
+}
