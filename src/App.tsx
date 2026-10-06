@@ -46,6 +46,7 @@ function AppContent() {
   // Rastrear si LotSearchModal estaba abierto cuando se abrió LotInfoModal
   const [wasLotSearchModalOpen, setWasLotSearchModalOpen] = useState(false);
   const [showAddLotModal, setShowAddLotModal] = useState(false);
+  const [lotToEdit, setLotToEdit] = useState<any>(null);
 
 
   // Handlers para eventos de Cesium
@@ -161,6 +162,12 @@ function AppContent() {
   const handleOpenVideoOverlay = () => {
     setShowVideoOverlay(true);
   };
+
+  const handleOpenAddLotEditor = useCallback((event: CustomEvent) => {
+    setLotToEdit(event.detail);
+    setShowLotInfoModal(false);
+    setShowAddLotModal(true);
+  }, []);
 
   const handleCloseVideoOverlay = () => {
     setShowVideoOverlay(false);
@@ -330,6 +337,10 @@ function AppContent() {
       handleCloseVideoOverlay as EventListener
     );
     window.addEventListener(
+      "openAddLotEditor",
+      handleOpenAddLotEditor as EventListener
+    );
+    window.addEventListener(
       "clearAllModals",
       handleClearAllModals as EventListener
     );
@@ -380,11 +391,15 @@ function AppContent() {
         handleCloseVideoOverlay as EventListener
       );
       window.removeEventListener(
+        "openAddLotEditor",
+        handleOpenAddLotEditor as EventListener
+      );
+      window.removeEventListener(
         "clearAllModals",
         handleClearAllModals as EventListener
       );
     };
-  }, [handleOpenAreasModal, handleOpenLotSearchModal, handleLoteSelected, handleLoteUpdated]);
+  }, [handleOpenAreasModal, handleOpenLotSearchModal, handleLoteSelected, handleLoteUpdated, handleOpenAddLotEditor]);
 
   const handleSplashComplete = () => {
     setShowSplash(false);
@@ -488,7 +503,7 @@ function AppContent() {
     <>
       {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
       {showInstructions && <Instructions onClose={handleInstructionsClose} />}
-      <Sidebar onAddLot={() => setShowAddLotModal(true)} />
+      <Sidebar onAddLot={() => { setLotToEdit(null); setShowAddLotModal(true); }} />
       <BottomBar
         entornoReopenVisible={showEntornoModal && entornoModalMinimized}
         onEntornoReopen={() => setEntornoModalMinimized(false)}
@@ -563,7 +578,12 @@ function AppContent() {
       {/* Modal para agregar lote */}
       <AddLotModal
         isOpen={showAddLotModal}
-        onClose={() => setShowAddLotModal(false)}
+        mode={lotToEdit ? "edit" : "add"}
+        initialLot={lotToEdit}
+        onClose={() => {
+          setShowAddLotModal(false);
+          setLotToEdit(null);
+        }}
       />
     </>
   );

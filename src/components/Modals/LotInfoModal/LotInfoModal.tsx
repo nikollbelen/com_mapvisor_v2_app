@@ -104,6 +104,29 @@ type NoteLine = {
   runs: NoteSegment[];
 };
 
+type LotMediaItem = {
+  type: "image" | "video" | "youtube";
+  url: string;
+  key?: string;
+  name?: string;
+};
+
+const parseLotMedia = (raw: unknown): LotMediaItem[] => {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.filter((item) => item?.type && item?.url);
+  }
+  if (typeof raw !== "string") return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((item) => item?.type && item?.url)
+      : [];
+  } catch {
+    return [];
+  }
+};
+
 const parseNotesHtmlToSegments = (html: string): NoteSegment[] => {
   if (!html || !canUseDom) {
     return html
@@ -424,6 +447,7 @@ const LotInfoModal = ({
   
   // Estado para mensaje flotante (toast)
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isDeletingLot, setIsDeletingLot] = useState(false);
   
   // Estados para manejar el focus de inputs formateados
   const [focusedInputs, setFocusedInputs] = useState<{[key: string]: boolean}>({});
@@ -454,8 +478,10 @@ const LotInfoModal = ({
         area: loteData.area || "0.00 m²",
         phase: loteData.phase || "1",
         id: loteData.id,
+        media: parseLotMedia(loteData.media || loteData.Media),
       }
     : defaultLotData;
+  const lotMedia: LotMediaItem[] = (lotData as any).media || [];
   const normalizedLotStatus = (lotData.status || "").toLowerCase();
   const statusBadgeStyle = getLotStatusBadgeStyle(normalizedLotStatus);
   const statusDisplayMap: Record<string, string> = {
@@ -479,6 +505,60 @@ const LotInfoModal = ({
     setLastSavedData(null);
     setQuotationCodeForModal(undefined);
     onClose?.();
+  };
+
+  const handleEditLot = () => {
+    window.dispatchEvent(new CustomEvent("openAddLotEditor", { detail: loteData }));
+  };
+
+  const handleDeleteLot = async () => {
+    if (!loteData?.id || isDeletingLot) return;
+    const confirmed = window.confirm(`¿Eliminar ${lotData.lot}? Esta acción también intentará borrar su multimedia.`);
+    if (!confirmed) return;
+
+    const scriptUrl = import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL;
+    if (!scriptUrl) {
+      setToastMessage("Falta configurar VITE_GOOGLE_APPS_SCRIPT_URL.");
+      return;
+    }
+
+    setIsDeletingLot(true);
+    try {
+      const resp = await fetch("/api/r2-delete-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keys: lotMedia.map((item) => item.key).filter(Boolean),
+        }),
+      });
+      if (!resp.ok) {
+        console.warn("[LotInfoModal] No se pudo borrar multimedia en R2");
+      }
+
+      const sheetResp = await fetch(scriptUrl, {
+        method: "POST",
+        redirect: "follow",
+        body: JSON.stringify({ action: "deleteLot", fid: loteData.id }),
+      });
+      let result: { ok?: boolean; error?: string } = {};
+      try {
+        result = await sheetResp.json();
+      } catch {
+        /* Google Apps Script redirect can return an empty response */
+      }
+      if (!sheetResp.ok || result.ok === false) {
+        throw new Error(result.error || "No se pudo eliminar el lote");
+      }
+
+      if (window.removeLotFromMap) {
+        window.removeLotFromMap(loteData.id);
+      }
+      handleClose();
+    } catch (error: any) {
+      setToastMessage(error.message || "No se pudo eliminar el lote.");
+    } finally {
+      setIsDeletingLot(false);
+    }
   };
 
   // Funciones para manejar el formato dinámico de inputs
@@ -2787,6 +2867,55 @@ const LotInfoModal = ({
                 <span className="lot-detail-value price">{lotData.price}</span>
               </div>
             </div>
+
+            {lotMedia.length > 0 && (
+              <div className="lot-media-section">
+                <div className="lot-media-title">
+                  <span className="material-symbols-outlined">perm_media</span>
+                  Multimedia
+                </div>
+                <div className="lot-media-grid">
+                  {lotMedia.map((item, index) => (
+                    <div className="lot-media-item" key={`${item.url}-${index}`}>
+                      {item.type === "image" && (
+                        <img src={item.url} alt={`Imagen de ${lotData.lot}`} loading="lazy" />
+                      )}
+                      {item.type === "video" && (
+                        <video src={item.url} controls preload="metadata" />
+                      )}
+                      {item.type === "youtube" && (
+                        <iframe
+                          src={item.url}
+                          title={`Video de ${lotData.lot}`}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {user && (
+              <div className="lot-admin-actions">
+                <button type="button" className="lot-admin-btn" onClick={handleEditLot}>
+                  <span className="material-symbols-outlined">edit</span>
+                  <span>Editar lote</span>
+                </button>
+                <button
+                  type="button"
+                  className="lot-admin-btn danger"
+                  onClick={handleDeleteLot}
+                  disabled={isDeletingLot}
+                >
+                  <span className="material-symbols-outlined">
+                    {isDeletingLot ? "hourglass_top" : "delete"}
+                  </span>
+                  <span>{isDeletingLot ? "Eliminando" : "Eliminar lote"}</span>
+                </button>
+              </div>
+            )}
 
 
             <div className="lot-buttons-container">

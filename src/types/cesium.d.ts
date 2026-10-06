@@ -96,6 +96,7 @@ declare global {
         coordinates: number[][][];
       };
     }) => void;
+    removeLotFromMap?: (fid: string | number) => void;
     showLoteLabels?: boolean;
   }
 }

@@ -1,10 +1,13 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { postToGoogleAppsScript } from "../../../utils/googleAppsScript";
 import "./AddLotModal.css";
 
 interface AddLotModalProps {
   isOpen: boolean;
   onClose: () => void;
+  mode?: "add" | "edit";
+  initialLot?: any;
+  onSaved?: () => void;
 }
 
 // ── Tipos internos ──────────────────────────────────────────────────────────
@@ -20,7 +23,22 @@ interface FormState {
   area: string;
   etapa: string;
   coordenadas: string;
+  youtubeUrl: string;
 }
+
+interface LotMediaItem {
+  type: "image" | "video" | "youtube";
+  url: string;
+  key?: string;
+  name?: string;
+}
+
+const MAX_IMAGE_FILES = 10;
+const MAX_VIDEO_FILES = 3;
+const MAX_IMAGE_SIZE_MB = 10;
+const MAX_VIDEO_SIZE_MB = 80;
+const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024;
+const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024;
 
 // ── Parser de coordenadas ───────────────────────────────────────────────────
 function parseCoordinates(raw: string): ParsedCoord[] | null {
@@ -52,7 +70,7 @@ function parseCoordinates(raw: string): ParsedCoord[] | null {
 }
 
 // ── Construir Feature GeoJSON ───────────────────────────────────────────────
-function buildGeoJsonFeature(form: FormState, coords: ParsedCoord[], fid: number) {
+function buildGeoJsonFeature(form: FormState, coords: ParsedCoord[], fid: number | string) {
   return {
     type: "Feature",
     properties: {
@@ -64,6 +82,7 @@ function buildGeoJsonFeature(form: FormState, coords: ParsedCoord[], fid: number
       area: form.area.trim(),
       precio: form.precio.trim(),
       etapa: form.etapa.trim(),
+      media: "",
     },
     geometry: {
       type: "Polygon",
@@ -80,15 +99,148 @@ const EMPTY_FORM: FormState = {
   area: "",
   etapa: "",
   coordenadas: "",
+  youtubeUrl: "",
 };
 
-const AddLotModal = ({ isOpen, onClose }: AddLotModalProps) => {
+function parseMedia(raw: unknown): LotMediaItem[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.filter((item) => item?.type && item?.url);
+  if (typeof raw !== "string") return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((item) => item?.type && item?.url)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function getYoutubeEmbedUrl(url: string) {
+  const trimmed = url.trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.replace(/^www\./, "");
+    let videoId = "";
+    if (host === "youtu.be") {
+      videoId = parsed.pathname.replace("/", "");
+    } else if (host.endsWith("youtube.com")) {
+      videoId = parsed.searchParams.get("v") || "";
+      if (!videoId && parsed.pathname.startsWith("/shorts/")) {
+        videoId = parsed.pathname.split("/")[2] || "";
+      }
+    }
+    return videoId ? `https://www.youtube.com/embed/${videoId}` : trimmed;
+  } catch {
+    return trimmed;
+  }
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fileIdentity(file: File) {
+  return `${file.name}-${file.size}-${file.lastModified}`;
+}
+
+async function readJsonResponse(resp: Response) {
+  const text = await resp.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+async function uploadLotFile(file: File, lotId: number | string): Promise<LotMediaItem> {
+  const presignResp = await fetch("/api/r2-upload-url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fileName: file.name,
+      fileType: file.type,
+      lotId,
+    }),
+  });
+  const presign = await readJsonResponse(presignResp);
+  if (!presignResp.ok || !presign?.ok) {
+    if (presignResp.status === 404) {
+      throw new Error(
+        "No se encontró /api/r2-upload-url. En local usa `vercel dev` o prueba en el deploy de Vercel; Vite solo no levanta las funciones API."
+      );
+    }
+    throw new Error(presign?.error || "No se pudo preparar la subida a Cloudflare R2");
+  }
+
+  const uploadResp = await fetch(presign.uploadUrl, {
+    method: "PUT",
+    body: file,
+  });
+  if (!uploadResp.ok) {
+    throw new Error(`No se pudo subir ${file.name}`);
+  }
+
+  return {
+    type: file.type.startsWith("video/") ? "video" : "image",
+    url: presign.publicUrl,
+    key: presign.key,
+    name: file.name,
+  };
+}
+
+const AddLotModal = ({
+  isOpen,
+  onClose,
+  mode = "add",
+  initialLot,
+  onSaved,
+}: AddLotModalProps) => {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [existingMedia, setExistingMedia] = useState<LotMediaItem[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [coordError, setCoordError] = useState<string>("");
+  const [mediaError, setMediaError] = useState<string>("");
   const [submitState, setSubmitState] = useState<
     "idle" | "loading" | "success" | "error"
   >("idle");
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const isEditMode = mode === "edit" && initialLot;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!isEditMode) {
+      setForm(EMPTY_FORM);
+      setExistingMedia([]);
+      setSelectedFiles([]);
+      setMediaError("");
+      return;
+    }
+
+    const media = parseMedia(initialLot.media || initialLot.Media);
+    const youtube = media.find((item) => item.type === "youtube")?.url || "";
+    setForm({
+      nombre: initialLot.nombre || initialLot.direccion || "",
+      estado: initialLot.estado || "disponible",
+      precio:
+        typeof initialLot.precio === "number"
+          ? String(initialLot.precio)
+          : initialLot.precio || "",
+      area:
+        typeof initialLot.area === "number"
+          ? String(initialLot.area)
+          : initialLot.area || "",
+      etapa: initialLot.phase || initialLot.etapa || "",
+      coordenadas: "",
+      youtubeUrl: youtube,
+    });
+    setExistingMedia(media.filter((item) => item.type !== "youtube"));
+    setSelectedFiles([]);
+    setMediaError("");
+  }, [isOpen, isEditMode, initialLot]);
 
   // Parsear en tiempo real para mostrar preview
   const parsedCoords = useCallback((): ParsedCoord[] | null => {
@@ -107,6 +259,78 @@ const AddLotModal = ({ isOpen, onClose }: AddLotModalProps) => {
     setSubmitState("idle");
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const incomingFiles = Array.from(e.target.files || []);
+    const currentImages =
+      existingMedia.filter((item) => item.type === "image").length +
+      selectedFiles.filter((file) => file.type.startsWith("image/")).length;
+    const currentVideos =
+      existingMedia.filter((item) => item.type === "video").length +
+      selectedFiles.filter((file) => file.type.startsWith("video/")).length;
+    let nextImages = currentImages;
+    let nextVideos = currentVideos;
+    const acceptedFiles: File[] = [];
+    const rejectedMessages: string[] = [];
+
+    incomingFiles.forEach((file) => {
+      const isImage = file.type.startsWith("image/");
+      const isVideo = file.type.startsWith("video/");
+
+      if (!isImage && !isVideo) {
+        rejectedMessages.push(`${file.name}: tipo no permitido.`);
+        return;
+      }
+
+      if (isImage && file.size > MAX_IMAGE_SIZE_BYTES) {
+        rejectedMessages.push(
+          `${file.name}: pesa ${formatBytes(file.size)}; máximo ${MAX_IMAGE_SIZE_MB} MB por imagen.`
+        );
+        return;
+      }
+
+      if (isVideo && file.size > MAX_VIDEO_SIZE_BYTES) {
+        rejectedMessages.push(
+          `${file.name}: pesa ${formatBytes(file.size)}; máximo ${MAX_VIDEO_SIZE_MB} MB por video.`
+        );
+        return;
+      }
+
+      if (isImage && nextImages >= MAX_IMAGE_FILES) {
+        rejectedMessages.push(`Máximo ${MAX_IMAGE_FILES} imágenes por lote.`);
+        return;
+      }
+
+      if (isVideo && nextVideos >= MAX_VIDEO_FILES) {
+        rejectedMessages.push(`Máximo ${MAX_VIDEO_FILES} videos por lote.`);
+        return;
+      }
+
+      acceptedFiles.push(file);
+      if (isImage) nextImages += 1;
+      if (isVideo) nextVideos += 1;
+    });
+
+    setSelectedFiles((prev) => {
+      const previousIds = new Set(prev.map(fileIdentity));
+      const uniqueNewFiles = acceptedFiles.filter((file) => !previousIds.has(fileIdentity(file)));
+      return [...prev, ...uniqueNewFiles];
+    });
+    setMediaError(rejectedMessages[0] || "");
+    e.target.value = "";
+    setSubmitState("idle");
+  };
+
+  const removeExistingMedia = (index: number) => {
+    setExistingMedia((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+    setSubmitState("idle");
+  };
+
+  const removeSelectedFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+    setMediaError("");
+    setSubmitState("idle");
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitState("idle");
@@ -119,8 +343,8 @@ const AddLotModal = ({ isOpen, onClose }: AddLotModalProps) => {
       return;
     }
 
-    const coords = parseCoordinates(form.coordenadas);
-    if (!coords) {
+    const coords = form.coordenadas.trim() ? parseCoordinates(form.coordenadas) : null;
+    if (!coords && !isEditMode) {
       setCoordError(
         "Formato inválido. Cada línea debe tener: longitud, latitud (ej: -71.893, -17.117). Mínimo 3 puntos."
       );
@@ -128,14 +352,48 @@ const AddLotModal = ({ isOpen, onClose }: AddLotModalProps) => {
       return;
     }
 
+    if (form.coordenadas.trim() && !coords) {
+      setCoordError(
+        "Formato inválido. Cada línea debe tener: longitud, latitud (ej: -71.893, -17.117). Mínimo 3 puntos."
+      );
+      setSubmitState("error");
+      return;
+    }
+
+    const fid = isEditMode ? initialLot.id : Date.now();
+
+    setSubmitState("loading");
+    let media: LotMediaItem[] = [...existingMedia];
+    try {
+      const uploadedMedia = await Promise.all(
+        selectedFiles.map((file) => uploadLotFile(file, fid))
+      );
+      media = [...media, ...uploadedMedia];
+      const youtubeEmbedUrl = getYoutubeEmbedUrl(form.youtubeUrl);
+      if (youtubeEmbedUrl) {
+        media.push({ type: "youtube", url: youtubeEmbedUrl });
+      }
+    } catch (err) {
+      console.error("[AddLotModal] Error al subir multimedia:", err);
+      setSubmitState("error");
+      setErrorMessage(
+        err instanceof Error
+          ? err.message
+          : "No se pudo subir la multimedia a Cloudflare R2. Revisa la configuración de R2 en Vercel."
+      );
+      return;
+    }
+
     // Generar un FID temporal (timestamp)
-    const tempFid = Date.now();
-    const feature = buildGeoJsonFeature(form, coords, tempFid);
+    const feature = coords ? buildGeoJsonFeature(form, coords, fid) : null;
+    if (feature) {
+      feature.properties.media = JSON.stringify(media);
+    }
 
     // 1) Añadir al mapa en tiempo real vía Cesium
     try {
       if (window.addLotToMap) {
-        window.addLotToMap(feature);
+        if (feature) window.addLotToMap(feature);
       }
     } catch (mapErr) {
       console.warn("[AddLotModal] No se pudo añadir al mapa:", mapErr);
@@ -144,17 +402,19 @@ const AddLotModal = ({ isOpen, onClose }: AddLotModalProps) => {
     // 2) Enviar a Google Apps Script (Sheet)
     const scriptUrl = import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL;
     if (scriptUrl) {
-      setSubmitState("loading");
       try {
         const payload = {
-          action: "addLot",
-          fid: tempFid,
+          action: isEditMode ? "updateLot" : "addLot",
+          fid,
           nombre: form.nombre.trim(),
           estado: form.estado,
           precio: form.precio.trim(),
           area: form.area.trim(),
           etapa: form.etapa.trim(),
-          coordenadas: coords.map((c) => `${c.lng},${c.lat}`).join("|"),
+          media: JSON.stringify(media),
+          ...(coords
+            ? { coordenadas: coords.map((c) => `${c.lng},${c.lat}`).join("|") }
+            : {}),
         };
 
         const resp = await postToGoogleAppsScript(scriptUrl, payload);
@@ -174,9 +434,13 @@ const AddLotModal = ({ isOpen, onClose }: AddLotModalProps) => {
         }
 
         setSubmitState("success");
+        onSaved?.();
         // Limpiar el formulario después del éxito
         setTimeout(() => {
           setForm(EMPTY_FORM);
+          setExistingMedia([]);
+          setSelectedFiles([]);
+          setMediaError("");
           setSubmitState("idle");
           onClose();
         }, 1500);
@@ -185,7 +449,7 @@ const AddLotModal = ({ isOpen, onClose }: AddLotModalProps) => {
         // El lote ya fue añadido al mapa; avisar que el Sheet falló
         setSubmitState("error");
         setErrorMessage(
-          "El lote se agregó al mapa, pero no se pudo guardar en Google Sheets. Configura el Apps Script para aceptar POST."
+          "No se pudo guardar en Google Sheets. Verifica que el Apps Script actualizado esté desplegado."
         );
       }
     } else {
@@ -193,6 +457,9 @@ const AddLotModal = ({ isOpen, onClose }: AddLotModalProps) => {
       setSubmitState("success");
       setTimeout(() => {
         setForm(EMPTY_FORM);
+        setExistingMedia([]);
+        setSelectedFiles([]);
+        setMediaError("");
         setSubmitState("idle");
         onClose();
       }, 1000);
@@ -201,6 +468,9 @@ const AddLotModal = ({ isOpen, onClose }: AddLotModalProps) => {
 
   const handleClose = () => {
     setForm(EMPTY_FORM);
+    setExistingMedia([]);
+    setSelectedFiles([]);
+    setMediaError("");
     setCoordError("");
     setSubmitState("idle");
     setErrorMessage("");
@@ -225,8 +495,12 @@ const AddLotModal = ({ isOpen, onClose }: AddLotModalProps) => {
             <span className="material-symbols-outlined">add_location_alt</span>
           </div>
           <div className="add-lot-header-text">
-            <h2 className="add-lot-title">Agregar lote</h2>
-            <p className="add-lot-subtitle">Registra un nuevo lote en el mapa</p>
+            <h2 className="add-lot-title">
+              {isEditMode ? "Editar lote" : "Agregar lote"}
+            </h2>
+            <p className="add-lot-subtitle">
+              {isEditMode ? "Actualiza datos y multimedia" : "Registra un nuevo lote en el mapa"}
+            </p>
           </div>
           <button
             type="button"
@@ -357,8 +631,9 @@ const AddLotModal = ({ isOpen, onClose }: AddLotModalProps) => {
                 spellCheck={false}
               />
               <p className="add-lot-coords-hint">
-                Pega pares <code>longitud, latitud</code> separados por saltos de línea.
-                Mínimo 3 puntos. El polígono se cierra automáticamente.
+                {isEditMode
+                  ? "Déjalo vacío para conservar el polígono actual."
+                  : "Pega pares longitud, latitud separados por saltos de línea. Mínimo 3 puntos. El polígono se cierra automáticamente."}
               </p>
               {coordError && (
                 <p className="add-lot-field-error">{coordError}</p>
@@ -372,6 +647,75 @@ const AddLotModal = ({ isOpen, onClose }: AddLotModalProps) => {
                 · El polígono se cerrará automáticamente ✓
               </div>
             )}
+
+            <div className="add-lot-divider" />
+
+            <p className="add-lot-section-label">Multimedia opcional</p>
+
+            <div className="add-lot-field full">
+              <label className="add-lot-label" htmlFor="al-media">
+                Imágenes o videos
+              </label>
+              <input
+                id="al-media"
+                type="file"
+                className="add-lot-file-input"
+                accept="image/*,video/*"
+                multiple
+                onChange={handleFileChange}
+              />
+              <p className="add-lot-coords-hint">
+                Puedes subir hasta {MAX_IMAGE_FILES} imágenes de {MAX_IMAGE_SIZE_MB} MB
+                y {MAX_VIDEO_FILES} videos de {MAX_VIDEO_SIZE_MB} MB por lote.
+              </p>
+              {mediaError && <p className="add-lot-field-error">{mediaError}</p>}
+            </div>
+
+            {(existingMedia.length > 0 || selectedFiles.length > 0) && (
+              <div className="add-lot-media-list">
+                {existingMedia.map((item, index) => (
+                  <div className="add-lot-media-chip" key={`${item.url}-${index}`}>
+                    <span className="material-symbols-outlined">
+                      {item.type === "video" ? "movie" : "image"}
+                    </span>
+                    <span>{item.name || item.url.split("/").pop()}</span>
+                    <button type="button" onClick={() => removeExistingMedia(index)}>
+                      <span className="material-symbols-outlined">close</span>
+                    </button>
+                  </div>
+                ))}
+                {selectedFiles.map((file) => (
+                  <div className="add-lot-media-chip pending" key={`${file.name}-${file.size}`}>
+                    <span className="material-symbols-outlined">
+                      {file.type.startsWith("video/") ? "movie" : "image"}
+                    </span>
+                    <span>{file.name} · {formatBytes(file.size)}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeSelectedFile(selectedFiles.indexOf(file))}
+                    >
+                      <span className="material-symbols-outlined">close</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="add-lot-field full">
+              <label className="add-lot-label" htmlFor="al-youtube">
+                Enlace de YouTube
+              </label>
+              <input
+                id="al-youtube"
+                name="youtubeUrl"
+                type="url"
+                className="add-lot-input"
+                placeholder="https://www.youtube.com/watch?v=..."
+                value={form.youtubeUrl}
+                onChange={handleChange}
+                autoComplete="off"
+              />
+            </div>
 
             {/* Mensajes de estado */}
             {submitState === "success" && (
@@ -411,7 +755,7 @@ const AddLotModal = ({ isOpen, onClose }: AddLotModalProps) => {
               ) : (
                 <>
                   <span className="material-symbols-outlined">add_location_alt</span>
-                  Agregar lote
+                  {isEditMode ? "Guardar cambios" : "Agregar lote"}
                 </>
               )}
             </button>

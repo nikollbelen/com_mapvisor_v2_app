@@ -255,6 +255,7 @@ function buildLoteSelectedDetail(entity) {
     boundaries: getter(window.getColindancias, () => ({})),
     id: getter(window.getId, (e) => getEntityProp(e, "fid")),
     phase: getter(window.getPhase, () => "1"),
+    media: getEntityProp(entity, "media") || "",
   };
 }
 
@@ -582,6 +583,7 @@ function populateFidToApiPropsFromSheet(lots) {
           : "",
       state: (lot["Estado"] || lot["estado"] || "disponible").toLowerCase(),
       etapa: lot["Etapa"] || lot["etapa"] || "",
+      media: lot["Media"] || lot["media"] || "",
       frente: lot["Colindancia Frente"] || "",
       derecha: lot["Colindancia Derecha"] || "",
       izquierda: lot["Colindancia Izquierda"] || "",
@@ -613,6 +615,7 @@ function buildGeoJsonFromSheetLots(lots) {
     const area = lot["Área (m²)"] || lot["Area"] || lot["area"] || api?.area || "";
     const precio = lot["Precio"] || lot["precio"] || api?.price || "";
     const etapa = lot["Etapa"] || lot["etapa"] || api?.etapa || "";
+    const media = lot["Media"] || lot["media"] || api?.media || "";
     const manzana = lot["Manzana"] || api?.block || "";
     const loteNum = lot["Lote"] || api?.lot || "";
 
@@ -628,6 +631,7 @@ function buildGeoJsonFromSheetLots(lots) {
         precio,
         estado,
         etapa,
+        media,
       },
       geometry: {
         type: "Polygon",
@@ -1241,6 +1245,7 @@ window.addLotToMap = function addLotToMap(feature) {
         precio:  parseFloat(p.precio) || 0,
         area:    p.area || "",
         etapa:   p.etapa || "",
+        media:   p.media || "",
       }),
       polygon: {
         hierarchy: hierarchy,
@@ -1322,6 +1327,27 @@ window.addLotToMap = function addLotToMap(feature) {
   } catch (err) {
     console.error("[addLotToMap] Error al añadir lote:", err);
   }
+};
+
+window.removeLotFromMap = function removeLotFromMap(fid) {
+  if (!lotesDataSource || fid == null) return;
+  const fidKey = String(fid);
+  const entity = findLotEntityByFid(fidKey);
+  if (entity) {
+    lotesDataSource.entities.remove(entity);
+  }
+  if (lotesData?.features) {
+    lotesData.features = lotesData.features.filter(
+      (feature) => String(feature?.properties?.fid) !== fidKey
+    );
+  }
+  if (typeof processedLots !== "undefined") {
+    const index = processedLots.findIndex((plot) => String(plot.fid) === fidKey);
+    if (index >= 0) processedLots.splice(index, 1);
+  }
+  fidToApiProps.delete(fidKey);
+  if (viewer?.scene) viewer.scene.requestRender();
+  window.dispatchEvent(new CustomEvent("lotCountsUpdated", { detail: getLotCountsByStatus() }));
 };
 
 function setupLoteInteractions() {
@@ -1629,6 +1655,7 @@ async function pollGoogleSheet() {
           price: lot['Precio'] ? String(lot['Precio']).replace(/[$,]/g, '').trim() : '',
           state: (lot['Estado'] || 'disponible').toLowerCase(),
           etapa: lot['Etapa'] || '',
+          media: lot['Media'] || lot['media'] || '',
           frente: lot['Colindancia Frente'] || '',
           derecha: lot['Colindancia Derecha'] || '',
           izquierda: lot['Colindancia Izquierda'] || '',
@@ -1685,6 +1712,7 @@ async function pollGoogleSheet() {
       if (setPropSafe("precio", sheetData.price)) dataChanged = true;
       if (setPropSafe("price", sheetData.price)) dataChanged = true;
       if (setPropSafe("etapa", sheetData.etapa)) dataChanged = true;
+      if (setPropSafe("media", sheetData.media)) dataChanged = true;
       if (setPropSafe("frente", sheetData.frente)) dataChanged = true;
       if (setPropSafe("derecha", sheetData.derecha)) dataChanged = true;
       if (setPropSafe("izquierda", sheetData.izquierda)) dataChanged = true;
