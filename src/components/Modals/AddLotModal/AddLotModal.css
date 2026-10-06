@@ -39,6 +39,10 @@
   animation: addLotModalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.add-lot-modal.is-saving {
+  cursor: wait;
+}
+
 @keyframes addLotModalIn {
   from { opacity: 0; transform: scale(0.96) translateY(10px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
@@ -109,6 +113,12 @@
 .add-lot-close:hover {
   background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
+}
+
+.add-lot-close:disabled {
+  opacity: 0.45;
+  cursor: wait;
+  pointer-events: none;
 }
 
 .add-lot-close .material-symbols-outlined {
@@ -224,6 +234,14 @@
   color: #ffffff;
 }
 
+.add-lot-input:disabled,
+.add-lot-select:disabled,
+.add-lot-textarea:disabled,
+.add-lot-file-input:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .add-lot-file-input {
   cursor: pointer;
 }
@@ -292,6 +310,11 @@
 .add-lot-media-chip button:hover {
   background: rgba(255, 107, 107, 0.14);
   color: #ff9a9a;
+}
+
+.add-lot-media-chip button:disabled {
+  opacity: 0.45;
+  cursor: wait;
 }
 
 .add-lot-textarea {

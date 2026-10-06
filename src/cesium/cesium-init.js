@@ -18,6 +18,16 @@ const viewer = new Cesium.Viewer("cesiumContainer", {
   pickTranslucentDepth: true,
 });
 
+try {
+  const labeledImageryLayer = await Cesium.ImageryLayer.fromWorldImagery({
+    style: Cesium.IonWorldImageryStyle.AERIAL_WITH_LABELS,
+  });
+  viewer.imageryLayers.removeAll(false);
+  viewer.imageryLayers.add(labeledImageryLayer);
+} catch (error) {
+  console.warn("[Cesium] No se pudo cargar Bing Aerial with Labels; se mantiene la capa base por defecto.", error);
+}
+
 // Activar el efecto Bloom (resplandor) en el viewer para el brillo neón
 const bloom = viewer.scene.postProcessStages.bloom;
 bloom.enabled = false; // Desactivado para no quemar el mapa. El brillo se emulará con un color sólido intenso.
@@ -184,6 +194,12 @@ function flyToLotEntity(entity, onComplete) {
   viewer.scene.requestRender();
 }
 
+function flyToSelectedLotEntity(onComplete) {
+  if (!selected?.polygon) return false;
+  flyToLotEntity(selected, onComplete);
+  return true;
+}
+
 function getEntityProp(entity, key) {
   if (!entity?.properties) return undefined;
   const prop = entity.properties[key];
@@ -242,8 +258,38 @@ function findLotEntityByNumber(lotNumber) {
 }
 
 function buildLoteSelectedDetail(entity) {
-  const getter = (fn, fallback) =>
-    typeof fn === "function" ? fn(entity) : fallback(entity);
+  const getter = (fn, fallback) => {
+    if (typeof fn !== "function") return fallback(entity);
+    const value = fn(entity);
+    return value == null || value === "" ? fallback(entity) : value;
+  };
+  const getPolygonCoordinatesText = () => {
+    if (!entity?.polygon?.hierarchy) return "";
+    try {
+      const hierarchy = entity.polygon.hierarchy.getValue(
+        window.Cesium.JulianDate.now()
+      );
+      const positions = hierarchy?.positions || [];
+      const coords = positions.map((position) => {
+        const carto = window.Cesium.Cartographic.fromCartesian(position);
+        return [
+          window.Cesium.Math.toDegrees(carto.longitude),
+          window.Cesium.Math.toDegrees(carto.latitude),
+        ];
+      });
+      const first = coords[0];
+      const last = coords[coords.length - 1];
+      const openCoords =
+        first && last && first[0] === last[0] && first[1] === last[1]
+          ? coords.slice(0, -1)
+          : coords;
+      return openCoords
+        .map(([lng, lat]) => `${lng.toFixed(12)}, ${lat.toFixed(12)}`)
+        .join("\n");
+    } catch {
+      return "";
+    }
+  };
 
   return {
     entity,
@@ -256,6 +302,7 @@ function buildLoteSelectedDetail(entity) {
     id: getter(window.getId, (e) => getEntityProp(e, "fid")),
     phase: getter(window.getPhase, () => "1"),
     media: getEntityProp(entity, "media") || "",
+    coordenadas: getEntityProp(entity, "coordenadas") || getPolygonCoordinatesText(),
   };
 }
 
@@ -409,6 +456,44 @@ function getStatusLabel(status) {
     default:
       return typeof status === "string" ? status : "";
   }
+}
+
+function parseLotNumericValue(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (value == null) return 0;
+
+  let text = String(value)
+    .trim()
+    .replace(/[$\s]/g, "")
+    .replace(/[^\d,.-]/g, "");
+
+  if (!text) return 0;
+
+  const lastComma = text.lastIndexOf(",");
+  const lastDot = text.lastIndexOf(".");
+
+  if (lastComma >= 0 && lastDot >= 0) {
+    const decimalSeparator = lastComma > lastDot ? "," : ".";
+    const thousandsSeparator = decimalSeparator === "," ? "." : ",";
+    text = text
+      .replace(new RegExp(`\\${thousandsSeparator}`, "g"), "")
+      .replace(decimalSeparator, ".");
+  } else if (lastComma >= 0) {
+    const decimalPart = text.slice(lastComma + 1);
+    text =
+      decimalPart.length === 3
+        ? text.replace(/,/g, "")
+        : text.replace(",", ".");
+  } else if (lastDot >= 0) {
+    const decimalPart = text.slice(lastDot + 1);
+    const hasThousandsGroups = /^\d{1,3}(\.\d{3})+$/.test(text);
+    if (decimalPart.length === 3 && hasThousandsGroups) {
+      text = text.replace(/\./g, "");
+    }
+  }
+
+  const parsed = parseFloat(text);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 let maxPrice = 0;
@@ -581,7 +666,7 @@ function populateFidToApiPropsFromSheet(lots) {
         : lot["precio"]
           ? String(lot["precio"]).replace(/[$,]/g, "").trim()
           : "",
-      state: (lot["Estado"] || lot["estado"] || "disponible").toLowerCase(),
+      state: normalizeLotStatus(lot["Estado"] || lot["estado"] || "disponible"),
       etapa: lot["Etapa"] || lot["etapa"] || "",
       media: lot["Media"] || lot["media"] || "",
       frente: lot["Colindancia Frente"] || "",
@@ -609,9 +694,9 @@ function buildGeoJsonFromSheetLots(lots) {
       lot["Nombre"] ||
       api?.number ||
       "";
-    const estado = String(
+    const estado = normalizeLotStatus(
       lot["Estado"] || lot["estado"] || api?.state || "disponible"
-    ).toLowerCase();
+    );
     const area = lot["Área (m²)"] || lot["Area"] || lot["area"] || api?.area || "";
     const precio = lot["Precio"] || lot["precio"] || api?.price || "";
     const etapa = lot["Etapa"] || lot["etapa"] || api?.etapa || "";
@@ -660,19 +745,9 @@ async function loadLotesData() {
       })
       .map((f, idx) => {
         const p = f.properties || {};
-        let areaNum = 0;
-        if (typeof p.area === "string") {
-          areaNum = parseFloat(p.area.replace(",", ".")) || 0;
-        } else if (typeof p.area === "number") {
-          areaNum = p.area;
-        }
-        let precioNum = 0;
-        if (typeof p.precio === "string") {
-          precioNum = parseFloat(p.precio.replace(",", ".")) || 0;
-        } else if (typeof p.precio === "number") {
-          precioNum = p.precio;
-        }
-        const estado = p.estado || "disponible";
+        const areaNum = parseLotNumericValue(p.area);
+        const precioNum = parseLotNumericValue(p.precio);
+        const estado = normalizeLotStatus(p.estado || "disponible");
         const manzana = p.manzana || "";
         const lote = p.lote || "";
         const direccion = p.direccion || p.number || "";
@@ -692,12 +767,13 @@ async function loadLotesData() {
               : p.number || `Lote ${idx + 1}`),
           price: precioNum,
           area: areaNum,
-          status: String(estado).toLowerCase(),
+          status: normalizeLotStatus(estado),
           phaseOrder,
           blockCode,
           lotIndex,
         };
       });
+    updateLotRangeConfigFromProcessedLots();
 
     // Create Cesium data source from the loaded data
     lotesDataSource = new window.Cesium.GeoJsonDataSource();
@@ -992,7 +1068,7 @@ function updateLotFromWebSocket(lotData) {
           lote: lotData.lot ?? feature.properties.lote,
           area: lotData.area ?? feature.properties.area,
           precio: lotData.price ?? feature.properties.precio,
-          estado: lotData.state ? String(lotData.state).toLowerCase() : feature.properties.estado,
+          estado: normalizeLotStatus(lotData.state || feature.properties.estado),
           etapa: lotData.etapa ?? feature.properties.etapa,
           frente: lotData.frente ?? feature.properties.frente,
           derecha: lotData.derecha ?? feature.properties.derecha,
@@ -1030,7 +1106,7 @@ function updateLotFromWebSocket(lotData) {
           lote: lotData.lot ?? "",
           area: lotData.area ?? 0,
           precio: lotData.price ?? 0,
-          estado: lotData.state ? String(lotData.state).toLowerCase() : "disponible",
+          estado: normalizeLotStatus(lotData.state || "disponible"),
           etapa: lotData.etapa ?? "",
           frente: lotData.frente ?? "",
           derecha: lotData.derecha ?? "",
@@ -1152,19 +1228,8 @@ function updateLotFromWebSocket(lotData) {
         .map((f, idx) => {
           const p = f.properties || {};
           // Normalize area
-          let areaNum = 0;
-          if (typeof p.area === "string") {
-            areaNum = parseFloat(p.area.replace(",", ".")) || 0;
-          } else if (typeof p.area === "number") {
-            areaNum = p.area;
-          }
-          // Price
-          let precioNum = 0;
-          if (typeof p.precio === "string") {
-            precioNum = parseFloat(p.precio.replace(",", ".")) || 0;
-          } else if (typeof p.precio === "number") {
-            precioNum = p.precio;
-          }
+          const areaNum = parseLotNumericValue(p.area);
+          const precioNum = parseLotNumericValue(p.precio);
 
           const estado = p.estado || "disponible";
           const manzana = p.manzana || "";
@@ -1186,7 +1251,7 @@ function updateLotFromWebSocket(lotData) {
                 : p.number || `Lote ${idx + 1}`),
             price: precioNum,
             area: areaNum,
-            status: String(estado).toLowerCase(),
+            status: normalizeLotStatus(estado),
             phaseOrder,
             blockCode,
             lotIndex,
@@ -1225,7 +1290,7 @@ window.addLotToMap = function addLotToMap(feature) {
   try {
     const p = feature.properties || {};
     const coords = feature.geometry.coordinates[0]; // exterior ring
-    const estado = String(p.estado || "disponible").toLowerCase();
+    const estado = normalizeLotStatus(p.estado || "disponible");
 
     // Construir jerarquía de polígono
     const positions = coords.map(([lng, lat]) =>
@@ -1242,7 +1307,7 @@ window.addLotToMap = function addLotToMap(feature) {
         manzana: p.manzana || "",
         estado:  estado,
         status:  estado,
-        precio:  parseFloat(p.precio) || 0,
+        precio:  parseLotNumericValue(p.precio),
         area:    p.area || "",
         etapa:   p.etapa || "",
         media:   p.media || "",
@@ -1306,8 +1371,8 @@ window.addLotToMap = function addLotToMap(feature) {
     }
 
     // Reconstruir processedLots con el nuevo lote
-    const areaNum = parseFloat(String(p.area).replace(",", ".")) || 0;
-    const precioNum = parseFloat(String(p.precio)) || 0;
+    const areaNum = parseLotNumericValue(p.area);
+    const precioNum = parseLotNumericValue(p.precio);
     processedLots.push({
       fid: p.fid,
       id: p.number || String(p.fid),
@@ -1319,6 +1384,7 @@ window.addLotToMap = function addLotToMap(feature) {
       blockCode: "",
       lotIndex: 0,
     });
+    updateLotRangeConfigFromProcessedLots();
 
     viewer.scene.requestRender();
     window.dispatchEvent(new CustomEvent("lotCountsUpdated", { detail: getLotCountsByStatus() }));
@@ -1345,6 +1411,7 @@ window.removeLotFromMap = function removeLotFromMap(fid) {
     const index = processedLots.findIndex((plot) => String(plot.fid) === fidKey);
     if (index >= 0) processedLots.splice(index, 1);
   }
+  updateLotRangeConfigFromProcessedLots();
   fidToApiProps.delete(fidKey);
   if (viewer?.scene) viewer.scene.requestRender();
   window.dispatchEvent(new CustomEvent("lotCountsUpdated", { detail: getLotCountsByStatus() }));
@@ -1397,8 +1464,8 @@ function setupLoteInteractions() {
     const area = entity.properties.area;
     const raw = typeof area?.getValue === "function" ? area.getValue() : area;
     if (typeof raw === "string") {
-      const match = raw.replace(",", ".").match(/[0-9]+(?:\.[0-9]+)?/);
-      return match ? `${parseFloat(match[0]).toFixed(2)} m²` : raw;
+      const parsed = parseLotNumericValue(raw);
+      return parsed ? `${parsed.toFixed(2)} m²` : raw;
     }
     if (typeof raw === "number") {
       return `${raw.toFixed(2)} m²`;
@@ -1418,8 +1485,7 @@ function setupLoteInteractions() {
     const val =
       typeof precio?.getValue === "function" ? precio.getValue() : precio;
     if (val == null || val === "") return undefined;
-    const num =
-      typeof val === "string" ? parseFloat(val.replace(",", ".")) : val;
+    const num = parseLotNumericValue(val);
     return isNaN(num) ? undefined : num;
   };
 
@@ -1653,7 +1719,7 @@ async function pollGoogleSheet() {
           lot: lot['Lote'] || '',
           area: lot['Área (m²)'] || lot['Area (m²)'] || lot['Area'] || '',
           price: lot['Precio'] ? String(lot['Precio']).replace(/[$,]/g, '').trim() : '',
-          state: (lot['Estado'] || 'disponible').toLowerCase(),
+          state: normalizeLotStatus(lot['Estado'] || 'disponible'),
           etapa: lot['Etapa'] || '',
           media: lot['Media'] || lot['media'] || '',
           frente: lot['Colindancia Frente'] || '',
@@ -1753,9 +1819,9 @@ async function pollGoogleSheet() {
          const fidKey = String(plot.fid);
          const sheetData = sheetDataByFid[fidKey];
          if (sheetData) {
-             plot.status = sheetData.state;
-             plot.price = parseFloat(sheetData.price) || 0;
-             plot.area = parseFloat(sheetData.area) || plot.area;
+             plot.status = normalizeLotStatus(sheetData.state);
+             plot.price = parseLotNumericValue(sheetData.price);
+             plot.area = parseLotNumericValue(sheetData.area) || plot.area;
              if (sheetData.block) plot.blockCode = sheetData.block;
              if (sheetData.lot) plot.lotIndex = parseInt(sheetData.lot, 10) || sheetData.lot;
              if (sheetData.number) {
@@ -1763,8 +1829,9 @@ async function pollGoogleSheet() {
              } else if (sheetData.block && sheetData.lot) {
                 plot.number = `Mz. ${sheetData.block} - Lote ${sheetData.lot}`;
              }
-         }
+          }
       });
+      updateLotRangeConfigFromProcessedLots();
     }
 
     // Trigger update for currently selected lot detail in UI if open
@@ -2502,7 +2569,31 @@ window.setLotRangeConfig = function (config = {}) {
   if (normalizedMinArea !== undefined) {
     minArea = normalizedMinArea;
   }
+  window.dispatchEvent(
+    new CustomEvent("lotRangeConfigUpdated", {
+      detail: { minPrice, maxPrice, minArea, maxArea },
+    })
+  );
 };
+
+function updateLotRangeConfigFromProcessedLots() {
+  const validLots = (processedLots || []).filter(
+    (lot) =>
+      Number.isFinite(lot.price) &&
+      Number.isFinite(lot.area) &&
+      lot.price >= 0 &&
+      lot.area >= 0
+  );
+  if (!validLots.length) return;
+
+  const nextRangeConfig = {
+    minPrice: Math.floor(Math.min(...validLots.map((lot) => lot.price))),
+    maxPrice: Math.ceil(Math.max(...validLots.map((lot) => lot.price))),
+    minArea: Math.floor(Math.min(...validLots.map((lot) => lot.area))),
+    maxArea: Math.ceil(Math.max(...validLots.map((lot) => lot.area))),
+  };
+  window.setLotRangeConfig(nextRangeConfig);
+}
 
 function handleLotes() {
   clearViewerModeState();
@@ -2516,16 +2607,16 @@ function handleLotes() {
 
 // Lot filtering and search functions
 function applyFilters(lots) {
-  const priceMin = parseInt(
+  const priceMin = parseLotNumericValue(
     document.querySelector('input[name="priceMin"]')?.value || 0
   );
-  const priceMax = parseInt(
+  const priceMax = parseLotNumericValue(
     document.querySelector('input[name="priceMax"]')?.value || maxPrice
   );
-  const areaMin = parseInt(
+  const areaMin = parseLotNumericValue(
     document.querySelector('input[name="areaMin"]')?.value || 0
   );
-  const areaMax = parseInt(
+  const areaMax = parseLotNumericValue(
     document.querySelector('input[name="areaMax"]')?.value || maxArea
   );
 
@@ -2533,19 +2624,23 @@ function applyFilters(lots) {
     document.querySelectorAll(".status-btn.active")
   ).map((btn) => btn.getAttribute("data-status"));
 
-  return lots.filter((lot) => {
+  const filtered = lots.filter((lot) => {
+    const reasons = [];
     // Price filter - price range
-    if (lot.price < priceMin || lot.price > priceMax) return false;
+    if (lot.price < priceMin || lot.price > priceMax) reasons.push("precio");
 
     // Area filter - area range
-    if (lot.area < areaMin || lot.area > areaMax) return false;
+    if (lot.area < areaMin || lot.area > areaMax) reasons.push("area");
 
     // Status filter — if nothing selected, show nothing; otherwise must match
-    if (!selectedStatus.includes(lot.status))
-      return false;
+    if (!selectedStatus.includes(lot.status)) reasons.push("estado");
+
+    if (reasons.length) return false;
 
     return true;
   });
+
+  return filtered;
 }
 
 function applySorting(lots) {
@@ -3167,6 +3262,7 @@ function zoomOut() {
 
 function goHome(onComplete) {
   try {
+    if (flyToSelectedLotEntity(onComplete)) return;
     flyToArequipaHome(onComplete);
   } catch (error) {
     console.error("Error al volar a la vista superior:", error);
@@ -3177,13 +3273,19 @@ function goHome(onComplete) {
 function view3D(onComplete) {
   if (!viewer) return;
 
-  const center = getCameraViewCenterOnGlobe();
+  const selectedPositions = getLotPolygonPositions(selected);
+  const selectedSphere = selectedPositions.length
+    ? window.Cesium.BoundingSphere.fromPoints(selectedPositions)
+    : null;
+  const center = selectedSphere?.center || getCameraViewCenterOnGlobe();
   const distance = window.Cesium.Cartesian3.distance(
     viewer.camera.positionWC,
     center
   );
-  const range = Math.max(distance * 0.95, 400);
-  const boundingSphere = new window.Cesium.BoundingSphere(center, 1);
+  const range = selectedSphere
+    ? Math.max(selectedSphere.radius * 4.2, 150)
+    : Math.max(distance * 0.95, 400);
+  const boundingSphere = selectedSphere || new window.Cesium.BoundingSphere(center, 1);
 
   viewer.camera.flyToBoundingSphere(boundingSphere, {
     duration: 1.8,

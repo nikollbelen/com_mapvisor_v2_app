@@ -37,7 +37,9 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
     { id: 'video', label: 'Video', shortLabel: 'Video', icon: 'videocam', mobileIcon: 'play_circle', mobileSubtitle: 'CINEMATOGRÁFICO' },
   ];
 
-  const visibleNavItems = navItems.filter((item) => isButtonVisible(item.id));
+  const visibleNavItems = navItems.filter(
+    (item) => item.id !== "entorno" && isButtonVisible(item.id)
+  );
 
   useEffect(() => {
     const checkScreenSize = () => {

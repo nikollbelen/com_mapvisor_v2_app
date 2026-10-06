@@ -16,6 +16,7 @@ declare global {
     hoverMarcadores: () => void;
     clearRoute: () => void;
     flyToView: (positions: any[]) => void;
+    flyToLotEntity: (entity: any, onComplete?: () => void) => void;
     reiniciarMenu: () => void;
     handleFotos: () => void;
     handleAreasComunes: () => void;

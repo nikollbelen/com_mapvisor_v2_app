@@ -2,7 +2,7 @@
 const SHEET_NAME = "Hoja 1";
 
 // Encabezados esperados (fila 1). El POST rellena por nombre, no por posición.
-// FID | Número | Estado | Precio | Área (m²) | Etapa | Manzana | Lote | Coordenadas | Media | Imagenes | Videos | YouTube
+// FID | Número | Estado | Precio | Área (m²) | Etapa | Manzana | Lote | Coordenadas | Media
 const REQUIRED_HEADERS = [
   "FID",
   "Número",
@@ -14,9 +14,6 @@ const REQUIRED_HEADERS = [
   "Lote",
   "Coordenadas",
   "Media",
-  "Imagenes",
-  "Videos",
-  "YouTube",
 ];
 
 function doGet(e) {
@@ -102,7 +99,6 @@ function ensureHeaders(sheet) {
 
 function valueForHeader(header, body) {
   const h = String(header).trim();
-  const media = parseMediaItems(body.media);
   switch (h) {
     case "FID":
     case "fid":
@@ -136,40 +132,8 @@ function valueForHeader(header, body) {
     case "Media":
     case "media":
       return body.media ?? "";
-    case "Imagenes":
-    case "Imágenes":
-    case "imagenes":
-    case "imágenes":
-      return media
-        .filter((item) => item.type === "image")
-        .map((item) => item.url)
-        .join("\n");
-    case "Videos":
-    case "videos":
-      return media
-        .filter((item) => item.type === "video")
-        .map((item) => item.url)
-        .join("\n");
-    case "YouTube":
-    case "youtube":
-    case "Youtube":
-      return media
-        .filter((item) => item.type === "youtube")
-        .map((item) => item.url)
-        .join("\n");
     default:
       return "";
-  }
-}
-
-function parseMediaItems(raw) {
-  if (!raw) return [];
-  if (Array.isArray(raw)) return raw;
-  try {
-    const parsed = JSON.parse(String(raw));
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (err) {
-    return [];
   }
 }
 

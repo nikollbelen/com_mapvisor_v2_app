@@ -142,6 +142,13 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function normalizeNumericInput(value: unknown) {
+  if (typeof value === "number") return String(value);
+  if (typeof value !== "string") return "";
+  const match = value.replace(",", ".").match(/[0-9]+(?:\.[0-9]+)?/);
+  return match ? match[0] : "";
+}
+
 function fileIdentity(file: File) {
   return `${file.name}-${file.size}-${file.lastModified}`;
 }
@@ -225,16 +232,10 @@ const AddLotModal = ({
     setForm({
       nombre: initialLot.nombre || initialLot.direccion || "",
       estado: initialLot.estado || "disponible",
-      precio:
-        typeof initialLot.precio === "number"
-          ? String(initialLot.precio)
-          : initialLot.precio || "",
-      area:
-        typeof initialLot.area === "number"
-          ? String(initialLot.area)
-          : initialLot.area || "",
+      precio: normalizeNumericInput(initialLot.precio),
+      area: normalizeNumericInput(initialLot.area),
       etapa: initialLot.phase || initialLot.etapa || "",
-      coordenadas: "",
+      coordenadas: initialLot.coordenadas || "",
       youtubeUrl: youtube,
     });
     setExistingMedia(media.filter((item) => item.type !== "youtube"));
@@ -467,6 +468,7 @@ const AddLotModal = ({
   };
 
   const handleClose = () => {
+    if (submitState === "loading") return;
     setForm(EMPTY_FORM);
     setExistingMedia([]);
     setSelectedFiles([]);
@@ -484,7 +486,7 @@ const AddLotModal = ({
   return (
     <div className="add-lot-overlay" onClick={handleClose}>
       <div
-        className="add-lot-modal"
+        className={`add-lot-modal ${isLoading ? "is-saving" : ""}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label="Agregar nuevo lote"
@@ -507,6 +509,7 @@ const AddLotModal = ({
             className="add-lot-close"
             onClick={handleClose}
             aria-label="Cerrar"
+            disabled={isLoading}
           >
             <span className="material-symbols-outlined">close</span>
           </button>
@@ -533,6 +536,7 @@ const AddLotModal = ({
                   placeholder='Ej: Villa 12, Jardín A, Parcela Norte…'
                   value={form.nombre}
                   onChange={handleChange}
+                  disabled={isLoading}
                   autoComplete="off"
                 />
               </div>
@@ -548,6 +552,7 @@ const AddLotModal = ({
                   className="add-lot-select"
                   value={form.estado}
                   onChange={handleChange}
+                  disabled={isLoading}
                 >
                   <option value="disponible">Disponible</option>
                   <option value="reservado">Reservado</option>
@@ -569,6 +574,7 @@ const AddLotModal = ({
                   placeholder='Ej: 1, II, A…'
                   value={form.etapa}
                   onChange={handleChange}
+                  disabled={isLoading}
                   autoComplete="off"
                 />
               </div>
@@ -588,6 +594,7 @@ const AddLotModal = ({
                   placeholder='45300'
                   value={form.precio}
                   onChange={handleChange}
+                  disabled={isLoading}
                   autoComplete="off"
                 />
               </div>
@@ -607,6 +614,7 @@ const AddLotModal = ({
                   placeholder='188.71'
                   value={form.area}
                   onChange={handleChange}
+                  disabled={isLoading}
                   autoComplete="off"
                 />
               </div>
@@ -628,6 +636,7 @@ const AddLotModal = ({
                 placeholder={`-71.893841942111905, -17.117220623098316\n-71.893151530107019, -17.116378663599498\n-71.892799975913476, -17.116612391090218\n-71.893529093394108, -17.117499940288173`}
                 value={form.coordenadas}
                 onChange={handleChange}
+                disabled={isLoading}
                 spellCheck={false}
               />
               <p className="add-lot-coords-hint">
@@ -663,6 +672,7 @@ const AddLotModal = ({
                 accept="image/*,video/*"
                 multiple
                 onChange={handleFileChange}
+                disabled={isLoading}
               />
               <p className="add-lot-coords-hint">
                 Puedes subir hasta {MAX_IMAGE_FILES} imágenes de {MAX_IMAGE_SIZE_MB} MB
@@ -679,7 +689,11 @@ const AddLotModal = ({
                       {item.type === "video" ? "movie" : "image"}
                     </span>
                     <span>{item.name || item.url.split("/").pop()}</span>
-                    <button type="button" onClick={() => removeExistingMedia(index)}>
+                    <button
+                      type="button"
+                      onClick={() => removeExistingMedia(index)}
+                      disabled={isLoading}
+                    >
                       <span className="material-symbols-outlined">close</span>
                     </button>
                   </div>
@@ -693,6 +707,7 @@ const AddLotModal = ({
                     <button
                       type="button"
                       onClick={() => removeSelectedFile(selectedFiles.indexOf(file))}
+                      disabled={isLoading}
                     >
                       <span className="material-symbols-outlined">close</span>
                     </button>
@@ -713,6 +728,7 @@ const AddLotModal = ({
                 placeholder="https://www.youtube.com/watch?v=..."
                 value={form.youtubeUrl}
                 onChange={handleChange}
+                disabled={isLoading}
                 autoComplete="off"
               />
             </div>

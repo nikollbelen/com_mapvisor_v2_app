@@ -53,53 +53,70 @@ const LotSearchModal = ({ isVisible = false, onClose }: LotSearchModalProps) => 
 
   useEffect(() => {
     if (!isVisible) return;
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
-    const projectId = import.meta.env.VITE_PROJECT_ID;
-    if (!apiBaseUrl || !projectId) return;
-
-    const controller = new AbortController();
-    const fetchLotConfig = async () => {
-      try {
-        const response = await fetch(`${apiBaseUrl}/lots/project/${projectId}/config`, {
-          method: 'GET',
-          headers: { 'Accept': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-          signal: controller.signal,
-        });
-        if (!response.ok) return;
-        const json = await response.json();
-        const config = json?.data;
-        if (!config) return;
-
-        const parseNumber = (value: unknown) => {
-          if (typeof value === 'number') return value;
-          if (typeof value === 'string') { const p = parseFloat(value); return isNaN(p) ? undefined : p; }
-          return undefined;
-        };
-
-        const nb = {
-          min: parseNumber(config.min_price) !== undefined ? Math.max(0, Math.floor(parseNumber(config.min_price)!)) : DEFAULT_PRICE_BOUNDS.min,
-          max: parseNumber(config.max_price) !== undefined ? Math.max(0, Math.ceil(parseNumber(config.max_price)!)) : DEFAULT_PRICE_BOUNDS.max,
-        };
-        const ab = {
-          min: parseNumber(config.min_area) !== undefined ? Math.max(0, Math.floor(parseNumber(config.min_area)!)) : DEFAULT_AREA_BOUNDS.min,
-          max: parseNumber(config.max_area) !== undefined ? Math.max(0, Math.ceil(parseNumber(config.max_area)!)) : DEFAULT_AREA_BOUNDS.max,
-        };
-
-        setPriceBounds(nb); setAreaBounds(ab);
-        setPriceMin(nb.min); setPriceMax(nb.max);
-        setAreaMin(ab.min); setAreaMax(ab.max);
-
-        if (window.setLotRangeConfig) {
-          window.setLotRangeConfig({ maxPrice: nb.max, minPrice: nb.min, maxArea: ab.max, minArea: ab.min });
-        }
-      } catch (e) {
-        if (e instanceof DOMException && e.name === 'AbortError') return;
-        console.error('Error fetching lot config', e);
+    const readNumber = (value: unknown, fallback: number) => {
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      if (typeof value === 'string') {
+        const parsed = parseFloat(value);
+        if (!Number.isNaN(parsed)) return parsed;
       }
+      return fallback;
     };
-    fetchLotConfig();
-    return () => controller.abort();
-  }, [isVisible]);
+
+    const applyBounds = (detail: any) => {
+      const nextPriceBounds = {
+        min: Math.max(0, Math.floor(readNumber(detail?.minPrice, priceBounds.min))),
+        max: Math.max(0, Math.ceil(readNumber(detail?.maxPrice, priceBounds.max))),
+      };
+      const nextAreaBounds = {
+        min: Math.max(0, Math.floor(readNumber(detail?.minArea, areaBounds.min))),
+        max: Math.max(0, Math.ceil(readNumber(detail?.maxArea, areaBounds.max))),
+      };
+      if (nextPriceBounds.max <= nextPriceBounds.min) nextPriceBounds.max = nextPriceBounds.min + 1;
+      if (nextAreaBounds.max <= nextAreaBounds.min) nextAreaBounds.max = nextAreaBounds.min + 1;
+
+      setPriceBounds((prev) => {
+        const wasFullRange = priceMin <= prev.min && priceMax >= prev.max;
+        if (wasFullRange) {
+          setPriceMin(nextPriceBounds.min);
+          setPriceMax(nextPriceBounds.max);
+        } else {
+          setPriceMin((current) => clampToBounds(current, nextPriceBounds));
+          setPriceMax((current) => clampToBounds(current, nextPriceBounds));
+        }
+        return nextPriceBounds;
+      });
+
+      setAreaBounds((prev) => {
+        const wasFullRange = areaMin <= prev.min && areaMax >= prev.max;
+        if (wasFullRange) {
+          setAreaMin(nextAreaBounds.min);
+          setAreaMax(nextAreaBounds.max);
+        } else {
+          setAreaMin((current) => clampToBounds(current, nextAreaBounds));
+          setAreaMax((current) => clampToBounds(current, nextAreaBounds));
+        }
+        return nextAreaBounds;
+      });
+    };
+
+    const handleRangeConfigUpdated = (event: CustomEvent) => {
+      applyBounds(event.detail);
+    };
+
+    window.addEventListener('lotRangeConfigUpdated', handleRangeConfigUpdated as EventListener);
+    if (window.getMinPrice && window.getMaxPrice && window.getMinArea && window.getMaxArea) {
+      applyBounds({
+        minPrice: window.getMinPrice(),
+        maxPrice: window.getMaxPrice(),
+        minArea: window.getMinArea(),
+        maxArea: window.getMaxArea(),
+      });
+    }
+
+    return () => {
+      window.removeEventListener('lotRangeConfigUpdated', handleRangeConfigUpdated as EventListener);
+    };
+  }, [isVisible, priceMin, priceMax, areaMin, areaMax, priceBounds.min, priceBounds.max, areaBounds.min, areaBounds.max]);
 
   const clampToBounds = (value: number, bounds: { min: number; max: number }) => {
     if (Number.isNaN(value)) return bounds.min;
@@ -149,22 +166,22 @@ const LotSearchModal = ({ isVisible = false, onClose }: LotSearchModalProps) => 
   };
 
   const handlePriceMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = clampToBounds(parseInt(e.target.value), priceBounds);
+    const v = clampToBounds(parseFloat(e.target.value), priceBounds);
     setPriceMin(v);
     if (window.loadLotData) window.loadLotData();
   };
   const handlePriceMaxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = clampToBounds(parseInt(e.target.value), priceBounds);
+    const v = clampToBounds(parseFloat(e.target.value), priceBounds);
     setPriceMax(v);
     if (window.loadLotData) window.loadLotData();
   };
   const handleAreaMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = clampToBounds(parseInt(e.target.value), areaBounds);
+    const v = clampToBounds(parseFloat(e.target.value), areaBounds);
     setAreaMin(v);
     if (window.loadLotData) window.loadLotData();
   };
   const handleAreaMaxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = clampToBounds(parseInt(e.target.value), areaBounds);
+    const v = clampToBounds(parseFloat(e.target.value), areaBounds);
     setAreaMax(v);
     if (window.loadLotData) window.loadLotData();
   };
@@ -223,8 +240,8 @@ const LotSearchModal = ({ isVisible = false, onClose }: LotSearchModalProps) => 
               <span className="output outputTwo price-output-max">${priceMax.toLocaleString()}</span>
               <span className="full-range"></span>
               <span className="incl-range"></span>
-              <input name="priceMin" value={priceMin} min={priceBounds.min} max={priceBounds.max} step="1000" type="range" onChange={handlePriceMinChange} />
-              <input name="priceMax" value={priceMax} min={priceBounds.min} max={priceBounds.max} step="1000" type="range" onChange={handlePriceMaxChange} />
+              <input name="priceMin" value={priceMin} min={priceBounds.min} max={priceBounds.max} step="1" type="range" onChange={handlePriceMinChange} />
+              <input name="priceMax" value={priceMax} min={priceBounds.min} max={priceBounds.max} step="1" type="range" onChange={handlePriceMaxChange} />
             </div>
           </div>
         </div>

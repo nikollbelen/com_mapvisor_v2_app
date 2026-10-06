@@ -16,6 +16,6 @@ export const DEFAULT_TOPBAR_VISIBILITY: Record<TopbarButtonId, boolean> = {
   fotos: false,
   areas: false,
   lotes: true,
-  entorno: true,
+  entorno: false,
   video: true,
 };

@@ -27,7 +27,13 @@ export type LotStatusKey = keyof typeof LOT_STATUS_COLORS;
 export function normalizeLotStatus(
   status: string | undefined | null
 ): LotStatusKey {
-  const normalized = (status || "").toString().toLowerCase();
+  const normalized = (status || "")
+    .toString()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/^en\s+/, "")
+    .trim();
   if (normalized in LOT_STATUS_COLORS) {
     return normalized as LotStatusKey;
   }
