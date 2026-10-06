@@ -75,7 +75,11 @@ function setMapViewerMode(mode) {
 }
 
 function isLotSelectionBlocked() {
-  return window.mapViewerMode === "fotos" || window.mapViewerMode === "areas";
+  return (
+    window.isDrawingPolygon === true ||
+    window.mapViewerMode === "fotos" ||
+    window.mapViewerMode === "areas"
+  );
 }
 
 // Deshabilitar el comportamiento de doble clic que hace zoom/enfoque automático

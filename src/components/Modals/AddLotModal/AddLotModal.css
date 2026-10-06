@@ -489,3 +489,64 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Dibujo de polígono en el mapa ── */
+.add-lot-btn-draw {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  margin-bottom: 10px;
+  padding: 8px 14px;
+  border: 1px solid #00e5ff;
+  border-radius: 8px;
+  background: rgba(0, 229, 255, 0.1);
+  color: #00e5ff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.add-lot-btn-draw:hover:not(:disabled) { background: rgba(0, 229, 255, 0.22); }
+.add-lot-btn-draw:disabled { opacity: 0.5; cursor: not-allowed; }
+.add-lot-btn-draw .material-symbols-outlined { font-size: 18px; }
+
+.add-lot-draw-bar {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100vw - 24px);
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: rgba(15, 20, 30, 0.92);
+  border: 1px solid rgba(0, 229, 255, 0.5);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  color: #fff;
+  backdrop-filter: blur(8px);
+}
+.add-lot-draw-info { display: flex; align-items: center; gap: 10px; }
+.add-lot-draw-info .material-symbols-outlined { color: #00e5ff; }
+.add-lot-draw-info strong { display: block; font-size: 14px; }
+.add-lot-draw-info small { display: block; font-size: 11px; opacity: 0.75; }
+.add-lot-draw-actions { display: flex; gap: 8px; }
+.add-lot-draw-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.add-lot-draw-actions button .material-symbols-outlined { font-size: 17px; }
+.add-lot-draw-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+.add-lot-draw-actions button.primary { background: #00b8d4; border-color: #00b8d4; color: #00212a; font-weight: 700; }
+.add-lot-draw-actions button.danger { border-color: #ff5252; color: #ff8a80; }

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { postToGoogleAppsScript } from "../../../utils/googleAppsScript";
 import "./AddLotModal.css";
 
@@ -251,6 +251,202 @@ const AddLotModal = ({
 
   const coordPreview = parsedCoords();
 
+  // ── Dibujo de polígono haciendo clic en el mapa ──────────────────────────
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [drawPoints, setDrawPoints] = useState<ParsedCoord[]>([]);
+  const drawPointsRef = useRef<ParsedCoord[]>([]);
+  const cursorRef = useRef<ParsedCoord | null>(null);
+
+  useEffect(() => {
+    drawPointsRef.current = drawPoints;
+    (window as any).viewer?.scene?.requestRender?.();
+  }, [drawPoints]);
+
+  const startDrawing = () => {
+    if (!(window as any).viewer || !(window as any).Cesium) {
+      setCoordError("El mapa aún no está listo para dibujar.");
+      return;
+    }
+    setCoordError("");
+    setDrawPoints([]);
+    cursorRef.current = null;
+    setIsDrawing(true);
+  };
+
+  const cancelDrawing = useCallback(() => {
+    setIsDrawing(false);
+    setDrawPoints([]);
+  }, []);
+
+  const undoPoint = useCallback(() => {
+    setDrawPoints((prev) => prev.slice(0, -1));
+  }, []);
+
+  const finishDrawing = useCallback(() => {
+    const pts = drawPointsRef.current;
+    if (pts.length < 3) return;
+    setForm((prev) => ({
+      ...prev,
+      coordenadas: pts.map((p) => `${p.lng}, ${p.lat}`).join("\n"),
+    }));
+    setCoordError("");
+    setSubmitState("idle");
+    setIsDrawing(false);
+    setDrawPoints([]);
+  }, []);
+
+  // Cerrar el modo dibujo si el modal se cierra
+  useEffect(() => {
+    if (!isOpen) {
+      setIsDrawing(false);
+      setDrawPoints([]);
+    }
+  }, [isOpen]);
+
+  // Captura de clics y entidades de vista previa mientras se dibuja
+  useEffect(() => {
+    if (!isDrawing) return;
+    const w = window as any;
+    const viewer = w.viewer;
+    const Cesium = w.Cesium;
+    if (!viewer || !Cesium) return;
+
+    w.isDrawingPolygon = true;
+    const canvas = viewer.scene.canvas as HTMLCanvasElement;
+    const prevCursor = canvas.style.cursor;
+    canvas.style.cursor = "crosshair";
+
+    const toCartesian = (p: ParsedCoord) =>
+      Cesium.Cartesian3.fromDegrees(p.lng, p.lat);
+    const livePositions = () => {
+      const pts = drawPointsRef.current.map(toCartesian);
+      if (cursorRef.current) pts.push(toCartesian(cursorRef.current));
+      return pts;
+    };
+
+    const color = Cesium.Color.fromCssColorString("#00e5ff");
+    const previewFill = viewer.entities.add({
+      polygon: {
+        hierarchy: new Cesium.CallbackProperty(() => {
+          const pos = livePositions();
+          return new Cesium.PolygonHierarchy(pos.length >= 3 ? pos : []);
+        }, false),
+        material: color.withAlpha(0.25),
+      },
+    });
+    const previewLine = viewer.entities.add({
+      polyline: {
+        positions: new Cesium.CallbackProperty(() => {
+          const pos = livePositions();
+          if (pos.length >= 3) pos.push(pos[0]);
+          return pos;
+        }, false),
+        width: 3,
+        material: color,
+      },
+    });
+
+    const handler = new Cesium.ScreenSpaceEventHandler(canvas);
+    const pickLngLat = (position: any): ParsedCoord | null => {
+      const cart = viewer.camera.pickEllipsoid(
+        position,
+        viewer.scene.globe.ellipsoid
+      );
+      if (!cart) return null;
+      const c = Cesium.Cartographic.fromCartesian(cart);
+      return {
+        lng: Cesium.Math.toDegrees(c.longitude),
+        lat: Cesium.Math.toDegrees(c.latitude),
+      };
+    };
+
+    handler.setInputAction((click: any) => {
+      const p = pickLngLat(click.position);
+      if (p) setDrawPoints((prev) => [...prev, p]);
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+    handler.setInputAction((move: any) => {
+      cursorRef.current = pickLngLat(move.endPosition);
+      viewer.scene.requestRender?.();
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+    // Doble clic: el 2º clic ya agregó un punto duplicado; se descarta y se finaliza
+    handler.setInputAction(() => {
+      const pts = drawPointsRef.current;
+      if (pts.length >= 2) {
+        const a = pts[pts.length - 1];
+        const b = pts[pts.length - 2];
+        if (Math.abs(a.lng - b.lng) < 1e-9 && Math.abs(a.lat - b.lat) < 1e-9) {
+          drawPointsRef.current = pts.slice(0, -1);
+        }
+      }
+      finishDrawing();
+    }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") cancelDrawing();
+      else if (e.key === "Enter") finishDrawing();
+      else if (e.key === "Backspace" || (e.ctrlKey && e.key.toLowerCase() === "z")) {
+        e.preventDefault();
+        undoPoint();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+
+    viewer.scene.requestRender?.();
+
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      handler.destroy();
+      viewer.entities.remove(previewFill);
+      viewer.entities.remove(previewLine);
+      canvas.style.cursor = prevCursor;
+      cursorRef.current = null;
+      // Pequeño retraso para que el último clic no seleccione un lote
+      setTimeout(() => {
+        w.isDrawingPolygon = false;
+      }, 300);
+      viewer.scene.requestRender?.();
+    };
+  }, [isDrawing, finishDrawing, cancelDrawing, undoPoint]);
+
+  // Marcadores numerados de los vértices dibujados
+  useEffect(() => {
+    if (!isDrawing) return;
+    const w = window as any;
+    const viewer = w.viewer;
+    const Cesium = w.Cesium;
+    if (!viewer || !Cesium) return;
+    const markers = drawPoints.map((p, i) =>
+      viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(p.lng, p.lat),
+        point: {
+          pixelSize: i === 0 ? 14 : 10,
+          color: i === 0 ? Cesium.Color.fromCssColorString("#ffd400") : Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.fromCssColorString("#00e5ff"),
+          outlineWidth: 3,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+        label: {
+          text: String(i + 1),
+          font: "bold 13px sans-serif",
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 3,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          pixelOffset: new Cesium.Cartesian2(0, -18),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      })
+    );
+    viewer.scene.requestRender?.();
+    return () => {
+      markers.forEach((m: any) => viewer.entities.remove(m));
+      viewer.scene.requestRender?.();
+    };
+  }, [isDrawing, drawPoints]);
+
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
@@ -483,6 +679,45 @@ const AddLotModal = ({
 
   const isLoading = submitState === "loading";
 
+  if (isDrawing) {
+    return (
+      <div className="add-lot-draw-bar" role="toolbar" aria-label="Dibujar polígono">
+        <div className="add-lot-draw-info">
+          <span className="material-symbols-outlined">touch_app</span>
+          <div>
+            <strong>
+              {drawPoints.length} {drawPoints.length === 1 ? "punto" : "puntos"}
+            </strong>
+            <small>
+              Clic para añadir · Doble clic o Enter para finalizar · Esc cancela
+            </small>
+          </div>
+        </div>
+        <div className="add-lot-draw-actions">
+          <button type="button" onClick={undoPoint} disabled={drawPoints.length === 0}>
+            <span className="material-symbols-outlined">undo</span>
+            Deshacer
+          </button>
+          <button
+            type="button"
+            className="primary"
+            onClick={finishDrawing}
+            disabled={drawPoints.length < 3}
+            title={drawPoints.length < 3 ? "Mínimo 3 puntos" : "Finalizar"}
+          >
+            <span className="material-symbols-outlined">check</span>
+            Finalizar
+          </button>
+          <button type="button" className="danger" onClick={cancelDrawing}>
+            <span className="material-symbols-outlined">close</span>
+            Cancelar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+
   return (
     <div className="add-lot-overlay" onClick={handleClose}>
       <div
@@ -626,6 +861,15 @@ const AddLotModal = ({
             <p className="add-lot-section-label">Vértices del polígono</p>
 
             <div className="add-lot-field full">
+              <button
+                type="button"
+                className="add-lot-btn-draw"
+                onClick={startDrawing}
+                disabled={isLoading}
+              >
+                <span className="material-symbols-outlined">draw</span>
+                Dibujar en el mapa
+              </button>
               <label className="add-lot-label" htmlFor="al-coords">
                 Coordenadas — una por línea <em>(longitud, latitud)</em>
               </label>
