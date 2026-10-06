@@ -1537,9 +1537,21 @@ function setupLoteInteractions() {
 
   window.getPhase = (entity) => {
     if (!entity || !entity.properties) return undefined;
-    const etapa = entity.properties.etapa;
+    const etapa =
+      entity.properties.etapa ??
+      entity.properties.phase ??
+      entity.properties.Etapa ??
+      entity.properties.Phase;
     const val = typeof etapa?.getValue === "function" ? etapa.getValue() : etapa;
-    return val || "1"; // Default a 1 si no hay etapa
+    if (val !== undefined && val !== null && String(val).trim() !== "") {
+      return String(val).trim();
+    }
+    const api = entity.properties._api;
+    const apiVal = typeof api?.getValue === "function" ? api.getValue() : api;
+    if (apiVal?.etapa || apiVal?.phase) {
+      return String(apiVal.etapa || apiVal.phase).trim();
+    }
+    return "1"; // Default a 1 si no hay etapa
   };
 
   // Function to calculate lot boundaries/colindancias

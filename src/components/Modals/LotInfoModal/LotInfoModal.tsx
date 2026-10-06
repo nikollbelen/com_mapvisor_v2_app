@@ -476,7 +476,7 @@ const LotInfoModal = ({
             })()
           : "$0.00",
         area: loteData.area || "0.00 m²",
-        phase: loteData.phase || "1",
+        phase: loteData.phase || loteData.etapa || "1",
         id: loteData.id,
         media: parseLotMedia(loteData.media || loteData.Media),
       }
@@ -2843,21 +2843,34 @@ const LotInfoModal = ({
               <div className="lot-box">
                 <span id="modalLot">{lotData.lot}</span>
               </div>
-              <div
-                className="lot-status-badge"
-                style={{
-                  backgroundColor: statusBadgeStyle.backgroundColor,
-                  color: statusBadgeStyle.color,
-                  border: `1px solid ${statusBadgeStyle.borderColor}`,
-                  boxShadow: `0 0 10px ${statusBadgeStyle.color}40`,
-                }}
-                id="modalStatus"
-              >
-                {statusLabel}
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                {lotData.phase && (
+                  <div className="lot-stage-badge" title="Etapa / Fase">
+                    Etapa {lotData.phase}
+                  </div>
+                )}
+                <div
+                  className="lot-status-badge"
+                  style={{
+                    backgroundColor: statusBadgeStyle.backgroundColor,
+                    color: statusBadgeStyle.color,
+                    border: `1px solid ${statusBadgeStyle.borderColor}`,
+                    boxShadow: `0 0 10px ${statusBadgeStyle.color}40`,
+                  }}
+                  id="modalStatus"
+                >
+                  {statusLabel}
+                </div>
               </div>
             </div>
 
             <div className="lot-property-details">
+              {lotData.phase && (
+                <div className="lot-detail-row">
+                  <span className="lot-detail-label">Etapa / Fase</span>
+                  <span className="lot-detail-value">Etapa {lotData.phase}</span>
+                </div>
+              )}
               <div className="lot-detail-row">
                 <span className="lot-detail-label">Área del Lote</span>
                 <span className="lot-detail-value">{lotData.area}</span>
