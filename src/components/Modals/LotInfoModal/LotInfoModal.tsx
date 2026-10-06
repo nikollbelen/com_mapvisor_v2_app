@@ -2897,25 +2897,23 @@ const LotInfoModal = ({
               </div>
             )}
 
-            {user && (
-              <div className="lot-admin-actions">
-                <button type="button" className="lot-admin-btn" onClick={handleEditLot}>
-                  <span className="material-symbols-outlined">edit</span>
-                  <span>Editar lote</span>
-                </button>
-                <button
-                  type="button"
-                  className="lot-admin-btn danger"
-                  onClick={handleDeleteLot}
-                  disabled={isDeletingLot}
-                >
-                  <span className="material-symbols-outlined">
-                    {isDeletingLot ? "hourglass_top" : "delete"}
-                  </span>
-                  <span>{isDeletingLot ? "Eliminando" : "Eliminar lote"}</span>
-                </button>
-              </div>
-            )}
+            <div className="lot-admin-actions">
+              <button type="button" className="lot-admin-btn" onClick={handleEditLot}>
+                <span className="material-symbols-outlined">edit</span>
+                <span>Editar lote</span>
+              </button>
+              <button
+                type="button"
+                className="lot-admin-btn danger"
+                onClick={handleDeleteLot}
+                disabled={isDeletingLot}
+              >
+                <span className="material-symbols-outlined">
+                  {isDeletingLot ? "hourglass_top" : "delete"}
+                </span>
+                <span>{isDeletingLot ? "Eliminando" : "Eliminar lote"}</span>
+              </button>
+            </div>
 
 
             <div className="lot-buttons-container">

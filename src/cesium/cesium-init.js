@@ -3314,8 +3314,10 @@ function getLotCountsByStatus() {
   const entitiesAll = lotesDataSource.entities.values.filter((e) => e.polygon);
 
   entitiesAll.forEach((e) => {
-    const loteValue = e.properties.lote ? e.properties.lote.getValue() : "";
-    if (loteValue === "") return;
+    const loteValue = getEntityProp(e, "lote");
+    const numberValue = getEntityProp(e, "number");
+    const direccionValue = getEntityProp(e, "direccion");
+    if (!loteValue && !numberValue && !direccionValue) return;
 
     const estadoProp = e.properties?.estado;
     const estadoValue =
