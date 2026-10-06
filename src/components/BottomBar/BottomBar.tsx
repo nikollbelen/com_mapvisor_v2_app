@@ -88,6 +88,15 @@ const BottomBar = ({
     };
   }, []);
 
+  // Resetear estado 3D al seleccionar un lote (ya que se abre en vista cenital / desde arriba)
+  useEffect(() => {
+    const handleLoteSelected = () => {
+      setView3dActive(false);
+    };
+    window.addEventListener('loteSelected', handleLoteSelected);
+    return () => window.removeEventListener('loteSelected', handleLoteSelected);
+  }, []);
+
   // -------------------------------------------------------
   // Handler de filtro de leyenda (multi-selección)
   // -------------------------------------------------------

@@ -194,10 +194,40 @@ function flyToLotEntity(entity, onComplete) {
   viewer.scene.requestRender();
 }
 
-function flyToSelectedLotEntity(onComplete) {
+/** Acerca la cámara al polígono del lote completamente desde arriba (cenital / vista superior). */
+function flyToLotEntityTopDown(entity, onComplete) {
+  if (!viewer || !entity) return;
+
+  const positions = getLotPolygonPositions(entity);
+  if (!positions.length) return;
+
+  const boundingSphere = window.Cesium.BoundingSphere.fromPoints(positions);
+  const range = Math.max(boundingSphere.radius * 4.2, 150);
+
+  viewer.camera.flyToBoundingSphere(boundingSphere, {
+    duration: 1.6,
+    offset: new window.Cesium.HeadingPitchRange(
+      0.0,
+      window.Cesium.Math.toRadians(-90),
+      range
+    ),
+    complete: onComplete || undefined,
+  });
+  viewer.scene.requestRender();
+}
+
+function flyToSelectedLotEntity(onComplete, { topDown = false } = {}) {
   if (!selected?.polygon) return false;
-  flyToLotEntity(selected, onComplete);
+  if (topDown) {
+    flyToLotEntityTopDown(selected, onComplete);
+  } else {
+    flyToLotEntity(selected, onComplete);
+  }
   return true;
+}
+
+function flyToSelectedLotEntityTopDown(onComplete) {
+  return flyToSelectedLotEntity(onComplete, { topDown: true });
 }
 
 function getEntityProp(entity, key) {
@@ -306,7 +336,7 @@ function buildLoteSelectedDetail(entity) {
   };
 }
 
-function selectLotOnMap(entity, { toggleIfSame = false, flyTo = false } = {}) {
+function selectLotOnMap(entity, { toggleIfSame = false, flyTo = false, topDown = true } = {}) {
   if (!entity?.polygon || isLotSelectionBlocked()) return false;
 
   const loteValue = getEntityProp(entity, "lote");
@@ -327,7 +357,11 @@ function selectLotOnMap(entity, { toggleIfSame = false, flyTo = false } = {}) {
   setMapViewerMode("lotes");
   focusLotEntity(entity);
   if (flyTo) {
-    flyToLotEntity(entity);
+    if (topDown) {
+      flyToLotEntityTopDown(entity);
+    } else {
+      flyToLotEntity(entity);
+    }
   }
 
   window.dispatchEvent(
@@ -353,7 +387,7 @@ function handleLotCardClick(lotRef, lotLabel) {
   }
 
   if (lotEntity) {
-    selectLotOnMap(lotEntity, { toggleIfSame: false, flyTo: true });
+    selectLotOnMap(lotEntity, { toggleIfSame: false, flyTo: true, topDown: true });
     return;
   }
 
@@ -3151,6 +3185,8 @@ window.hoverMarcadores = hoverMarcadores;
 window.clearRoute = clearRoute;
 window.flyToView = flyToView;
 window.flyToLotEntity = flyToLotEntity;
+window.flyToLotEntityTopDown = flyToLotEntityTopDown;
+window.flyToSelectedLotEntityTopDown = flyToSelectedLotEntityTopDown;
 window.flyToMarkersView = flyToMarkersView;
 window.reiniciarMenu = reiniciarMenu;
 window.handleFotos = handleFotos;
@@ -3262,7 +3298,7 @@ function zoomOut() {
 
 function goHome(onComplete) {
   try {
-    if (flyToSelectedLotEntity(onComplete)) return;
+    if (flyToSelectedLotEntityTopDown(onComplete)) return;
     flyToArequipaHome(onComplete);
   } catch (error) {
     console.error("Error al volar a la vista superior:", error);

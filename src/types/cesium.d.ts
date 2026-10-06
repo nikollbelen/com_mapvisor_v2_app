@@ -17,6 +17,8 @@ declare global {
     clearRoute: () => void;
     flyToView: (positions: any[]) => void;
     flyToLotEntity: (entity: any, onComplete?: () => void) => void;
+    flyToLotEntityTopDown?: (entity: any, onComplete?: () => void) => void;
+    flyToSelectedLotEntityTopDown?: (onComplete?: () => void) => boolean;
     reiniciarMenu: () => void;
     handleFotos: () => void;
     handleAreasComunes: () => void;
