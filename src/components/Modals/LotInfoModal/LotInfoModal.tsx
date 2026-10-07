@@ -10,6 +10,7 @@ import {
 import jsPDF from 'jspdf';
 import "./LotInfoModal.css";
 import ContactModal from "../ContactModal/ContactModal";
+import ConfirmDialog from "../shared/ConfirmDialog";
 import { useAuth } from "../../../contexts/AuthContext";
 import { getLotStatusBadgeStyle } from "../../../constants/lotStatusColors";
 import {
@@ -452,6 +453,7 @@ const LotInfoModal = ({
   // Estado para mensaje flotante (toast)
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDeletingLot, setIsDeletingLot] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
   // Estados para manejar el focus de inputs formateados
   const [focusedInputs, setFocusedInputs] = useState<{[key: string]: boolean}>({});
@@ -515,14 +517,17 @@ const LotInfoModal = ({
     window.dispatchEvent(new CustomEvent("openAddLotEditor", { detail: loteData }));
   };
 
-  const handleDeleteLot = async () => {
+  const handleDeleteLot = () => {
     if (!loteData?.id || isDeletingLot) return;
-    const confirmed = window.confirm(`¿Eliminar ${lotData.lot}? Esta acción también intentará borrar su multimedia.`);
-    if (!confirmed) return;
+    setShowDeleteConfirm(true);
+  };
 
+  const handleConfirmDeleteLot = async () => {
+    if (!loteData?.id || isDeletingLot) return;
     const scriptUrl = import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL;
     if (!scriptUrl) {
       setToastMessage("Falta configurar VITE_GOOGLE_APPS_SCRIPT_URL.");
+      setShowDeleteConfirm(false);
       return;
     }
 
@@ -564,8 +569,10 @@ const LotInfoModal = ({
       if (window.removeLotFromMap) {
         window.removeLotFromMap(loteData.id);
       }
+      setShowDeleteConfirm(false);
       handleClose();
     } catch (error: any) {
+      setShowDeleteConfirm(false);
       setToastMessage(error.message || "No se pudo eliminar el lote.");
     } finally {
       setIsDeletingLot(false);
@@ -3321,6 +3328,18 @@ const LotInfoModal = ({
           <span>{toastMessage}</span>
         </div>
       )}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title={`Eliminar ${lotData.lot}`}
+        message="Esta acción retirará el lote del mapa y también intentará borrar su multimedia asociada. No se podrá deshacer desde esta pantalla."
+        confirmLabel="Eliminar lote"
+        cancelLabel="Conservar"
+        icon="delete_forever"
+        variant="danger"
+        isLoading={isDeletingLot}
+        onCancel={() => setShowDeleteConfirm(false)}
+        onConfirm={handleConfirmDeleteLot}
+      />
     </div>
   );
 };
