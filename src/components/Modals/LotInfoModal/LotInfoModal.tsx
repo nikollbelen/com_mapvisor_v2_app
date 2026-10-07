@@ -457,7 +457,7 @@ const LotInfoModal = ({
     status: "Disponible",
     price: "$0.00",
     area: "0.00 m²",
-    phase: "1",
+    phase: "",
     id: undefined,
   };
 
@@ -476,7 +476,7 @@ const LotInfoModal = ({
             })()
           : "$0.00",
         area: loteData.area || "0.00 m²",
-        phase: loteData.phase || loteData.etapa || "1",
+        phase: loteData.phase || loteData.etapa || "",
         id: loteData.id,
         media: parseLotMedia(loteData.media || loteData.Media),
       }
@@ -2843,10 +2843,10 @@ const LotInfoModal = ({
               <div className="lot-box">
                 <span id="modalLot">{lotData.lot}</span>
               </div>
-              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <div className="lot-identification-meta">
                 {lotData.phase && (
                   <div className="lot-stage-badge" title="Etapa / Fase">
-                    Etapa {lotData.phase}
+                    {lotData.phase}
                   </div>
                 )}
                 <div
@@ -2868,7 +2868,7 @@ const LotInfoModal = ({
               {lotData.phase && (
                 <div className="lot-detail-row">
                   <span className="lot-detail-label">Etapa / Fase</span>
-                  <span className="lot-detail-value">Etapa {lotData.phase}</span>
+                  <span className="lot-detail-value">{lotData.phase}</span>
                 </div>
               )}
               <div className="lot-detail-row">
@@ -2977,7 +2977,7 @@ const LotInfoModal = ({
               <div>
                 <h2 className="quotation-title">Cotizador</h2>
                 <p className="quotation-subtitle">
-                  {getLotWithoutPhase(lotData.lot)} · {lotData.phase || "1"}
+                  {[getLotWithoutPhase(lotData.lot), lotData.phase].filter(Boolean).join(" · ")}
                 </p>
               </div>
             </div>

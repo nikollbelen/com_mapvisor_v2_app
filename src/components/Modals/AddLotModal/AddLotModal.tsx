@@ -1,5 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { postToGoogleAppsScript } from "../../../utils/googleAppsScript";
+import {
+  confirmGoogleAppsScriptWrite,
+  postToGoogleAppsScript,
+} from "../../../utils/googleAppsScript";
 import "./AddLotModal.css";
 
 interface AddLotModalProps {
@@ -617,7 +620,18 @@ const AddLotModal = ({
         const resp = await postToGoogleAppsScript(scriptUrl, payload);
 
         if (!resp.ok) {
-          throw new Error(`Error HTTP ${resp.status}`);
+          const writeWasPersisted = await confirmGoogleAppsScriptWrite(
+            scriptUrl,
+            payload
+          );
+          if (!writeWasPersisted) {
+            throw new Error(`Error HTTP ${resp.status}`);
+          }
+          console.warn(
+            "[AddLotModal] Apps Script devolvió HTTP",
+            resp.status,
+            "pero el lote fue confirmado en Google Sheets."
+          );
         }
 
         let result: { ok?: boolean; error?: string } = {};
@@ -627,7 +641,17 @@ const AddLotModal = ({
           /* respuesta vacía tras redirect de GAS */
         }
         if (result.ok === false) {
-          throw new Error(result.error || "Error al guardar en Sheets");
+          const writeWasPersisted = await confirmGoogleAppsScriptWrite(
+            scriptUrl,
+            payload
+          );
+          if (!writeWasPersisted) {
+            throw new Error(result.error || "Error al guardar en Sheets");
+          }
+          console.warn(
+            "[AddLotModal] Apps Script reportó error, pero el lote fue confirmado en Google Sheets:",
+            result.error
+          );
         }
 
         setSubmitState("success");
@@ -806,7 +830,7 @@ const AddLotModal = ({
                   name="etapa"
                   type="text"
                   className="add-lot-input"
-                  placeholder='Ej: 1, II, A…'
+                  placeholder='Ej: Etapa I, Terminado…'
                   value={form.etapa}
                   onChange={handleChange}
                   disabled={isLoading}
