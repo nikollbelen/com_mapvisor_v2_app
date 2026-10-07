@@ -731,26 +731,39 @@ function compareLotsByLocation(a, b, isAscending = true) {
 async function fetchSheetsLotsWithRetry() {
   const scriptUrl = import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL;
   if (!scriptUrl) return [];
-  let resp = null;
   let tries = 0;
-  while (tries < 4) {
+
+  while (true) {
     try {
-      resp = await fetch(scriptUrl, { cache: "no-store" });
-      if (resp.ok) break;
+      const resp = await fetch(scriptUrl, { cache: "no-store" });
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`);
+      }
+
+      const parsed = await resp.json();
+      const lots = Array.isArray(parsed) ? parsed : [];
+      if (!Array.isArray(parsed)) {
+        console.warn("[SHEETS] La respuesta no es un array:", parsed);
+        throw new Error("Respuesta de Google Sheets inválida");
+      }
+
+      console.log(`[SHEETS] ${lots.length} filas cargadas desde Google Sheets`);
+      return lots;
     } catch (e) {
-      // reintento silencioso
+      tries++;
+      const delay = Math.min(1500 + tries * 500, 5000);
+      console.warn(
+        `[SHEETS] Intento inicial ${tries} fallido. Reintentando en ${Math.round(delay / 1000)}s...`,
+        e
+      );
+      window.dispatchEvent(
+        new CustomEvent("sheetsLoadingRetry", {
+          detail: { attempt: tries, delay, error: e instanceof Error ? e.message : String(e) },
+        })
+      );
+      await new Promise((r) => setTimeout(r, delay));
     }
-    tries++;
-    if (tries < 4) await new Promise((r) => setTimeout(r, 1500));
   }
-  if (!resp || !resp.ok) return [];
-  const parsed = await resp.json();
-  const lots = Array.isArray(parsed) ? parsed : [];
-  if (!Array.isArray(parsed)) {
-    console.warn("[SHEETS] La respuesta no es un array:", parsed);
-  }
-  console.log(`[SHEETS] ${lots.length} filas cargadas desde Google Sheets`);
-  return lots;
 }
 
 function parseSheetCoordString(raw) {

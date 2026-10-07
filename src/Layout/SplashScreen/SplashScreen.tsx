@@ -38,14 +38,18 @@ const SplashScreen = ({ onComplete }: SplashScreenProps) => {
 
     // Escuchar cuando Cesium termina de cargar y procesar datos de Google Sheets
     window.addEventListener('cesiumReady', finishLoading);
-    
-    // Fallback de seguridad por si algo falla y el evento nunca llega
-    const fallbackTimer = setTimeout(finishLoading, 10000);
+
+    const handleSheetsRetry = (event: Event) => {
+      const detail = (event as CustomEvent<{ attempt?: number }>).detail;
+      const attempt = detail?.attempt ? ` (${detail.attempt})` : "";
+      setLoadingMessage(`Reintentando cargar lotes${attempt}...`);
+    };
+    window.addEventListener('sheetsLoadingRetry', handleSheetsRetry as EventListener);
 
     return () => {
       clearInterval(msgInterval);
       window.removeEventListener('cesiumReady', finishLoading);
-      clearTimeout(fallbackTimer);
+      window.removeEventListener('sheetsLoadingRetry', handleSheetsRetry as EventListener);
     };
   }, [onComplete]);
 
