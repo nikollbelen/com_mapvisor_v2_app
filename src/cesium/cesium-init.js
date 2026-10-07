@@ -99,6 +99,8 @@ let selected = null;
 let selectedOriginalMaterial = null;
 /** Cuadrícula colorida activa por defecto (los polígonos cargan con colores de estado). */
 let lotGridActive = true;
+window.polygonLabels = window.polygonLabels || [];
+const LOT_LABEL_MAX_DISTANCE = 2000;
 
 function isLotGridActive() {
   // Usar siempre la variable JS, no el DOM (el botón React usa clases distintas a "active")
@@ -496,6 +498,94 @@ function getStatusLabel(status) {
   }
 }
 
+function getCesiumPropValue(prop) {
+  return prop ? (typeof prop.getValue === "function" ? prop.getValue() : prop) : "";
+}
+
+function getLotLabelText(entity) {
+  if (!entity?.properties) return "";
+  return String(getCesiumPropValue(entity.properties.number) || "").trim();
+}
+
+function createLotLabelEntity(entity, positions) {
+  const labelName = getLotLabelText(entity);
+  if (!labelName || !positions || positions.length === 0) return null;
+
+  const center = window.Cesium.BoundingSphere.fromPoints(positions).center;
+  const labelCartographic = window.Cesium.Cartographic.fromCartesian(center);
+  const elevatedLabelPosition = window.Cesium.Cartographic.toCartesian(
+    new window.Cesium.Cartographic(
+      labelCartographic.longitude,
+      labelCartographic.latitude,
+      labelCartographic.height + 5.0
+    )
+  );
+
+  const labelEntity = viewer.entities.add({
+    position: elevatedLabelPosition,
+    properties: entity.properties,
+    label: {
+      text: new window.Cesium.CallbackProperty(() => getLotLabelText(entity), false),
+      font: getLabelFont(),
+      fillColor: window.Cesium.Color.WHITE,
+      outlineColor: window.Cesium.Color.GRAY,
+      outlineWidth: getLabelOutlineWidth(),
+      style: window.Cesium.LabelStyle.FILL_AND_OUTLINE,
+      verticalOrigin: window.Cesium.VerticalOrigin.CENTER,
+      pixelOffset: new window.Cesium.Cartesian2(0, 0),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      scale: getLabelScale(),
+      heightReference: window.Cesium.HeightReference.NONE,
+      show: window.showLoteLabels !== false,
+    },
+  });
+
+  window.polygonLabels.push(labelEntity);
+  return labelEntity;
+}
+
+function removeLotLabelByFid(fid) {
+  if (fid == null || !window.polygonLabels) return;
+
+  const fidKey = String(fid);
+  window.polygonLabels = window.polygonLabels.filter((labelEntity) => {
+    const labelFid = getCesiumPropValue(labelEntity?.properties?.fid);
+    if (String(labelFid) !== fidKey) return true;
+
+    viewer.entities.remove(labelEntity);
+    return false;
+  });
+}
+
+function updateLotLabelsVisibility() {
+  if (!window.polygonLabels || window.polygonLabels.length === 0) return;
+
+  window.polygonLabels.forEach((entity) => {
+    if (!entity?.label) return;
+
+    const hasText = !!getLotLabelText(entity);
+    const labelPosition =
+      typeof entity.position?.getValue === "function"
+        ? entity.position.getValue(window.Cesium.JulianDate.now())
+        : entity.position;
+    const distance =
+      labelPosition
+        ? window.Cesium.Cartesian3.distance(viewer.camera.positionWC, labelPosition)
+        : Number.POSITIVE_INFINITY;
+    const showByDistance = distance < LOT_LABEL_MAX_DISTANCE;
+
+    entity.label.show = showByDistance && hasText && (window.showLoteLabels !== false);
+
+    if (distance <= 1000) {
+      entity.label.scale = 1.0;
+    } else if (distance <= LOT_LABEL_MAX_DISTANCE) {
+      entity.label.scale = 1.3;
+    } else {
+      entity.label.scale = 1.6;
+    }
+  });
+}
+
 function parseLotNumericValue(value) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   if (value == null) return 0;
@@ -820,54 +910,14 @@ async function loadLotesData() {
 
     // Add labels to each terrain polygon
     const entities = lotesDataSource.entities.values;
-    let polygonLabels = [];
+    window.polygonLabels = [];
     entities.forEach((entity) => {
       if (entity.polygon && entity.properties && entity.properties.number) {
         const positions = entity.polygon.hierarchy.getValue(
           window.Cesium.JulianDate.now()
         ).positions;
 
-        // Calculate the center of the polygon
-        const center =
-          window.Cesium.BoundingSphere.fromPoints(positions).center;
-
-        // Elevar físicamente el label por encima del polígono
-        const labelCartographic = window.Cesium.Cartographic.fromCartesian(center);
-        const elevatedLabelPosition = window.Cesium.Cartographic.toCartesian(
-          new window.Cesium.Cartographic(
-            labelCartographic.longitude,
-            labelCartographic.latitude,
-            labelCartographic.height + 5.0 // 5m por encima del polígono
-          )
-        );
-
-        // Add a label at the center of the polygon
-        const labelEntity = viewer.entities.add({
-          position: elevatedLabelPosition,
-          properties: entity.properties,
-          label: {
-            text: new window.Cesium.CallbackProperty(() => {
-              const getPropVal = (p) => p ? (typeof p.getValue === 'function' ? p.getValue() : p) : "";
-              return getPropVal(entity.properties.number) || "";
-            }, false),
-            font: getLabelFont(),
-            fillColor: window.Cesium.Color.WHITE,
-            outlineColor: window.Cesium.Color.GRAY,
-            outlineWidth: getLabelOutlineWidth(),
-            style: window.Cesium.LabelStyle.FILL_AND_OUTLINE,
-            verticalOrigin: window.Cesium.VerticalOrigin.CENTER,
-            pixelOffset: new window.Cesium.Cartesian2(0, 0),
-            // Combinar elevación física con disableDepthTestDistance para asegurar visibilidad
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
-            scale: getLabelScale(),
-            heightReference: window.Cesium.HeightReference.NONE,
-            show: (() => {
-              const num = entity.properties.number ? entity.properties.number.getValue() : "";
-              return !!num;
-            })(),
-          },
-        });
-        polygonLabels.push(labelEntity);
+        createLotLabelEntity(entity, positions);
       }
     });
 
@@ -916,23 +966,7 @@ async function loadLotesData() {
       );
 
       // Control lot label visibility
-      polygonLabels.forEach((entity) => {
-        const showByDistance = distance < MAX_DISTANCE;
-        const num = entity.properties && entity.properties.number ? entity.properties.number.getValue() : "";
-        const hasText = !!num;
-
-        if (entity.label) {
-          // Mostrar solo si está en rango, tiene texto Y el modo actual permite etiquetas
-          entity.label.show = showByDistance && hasText && (window.showLoteLabels !== false);
-          if (distance <= 1000) {
-            entity.label.scale = 1.0;
-          } else if (distance <= 5000) {
-            entity.label.scale = 1.3;
-          } else {
-            entity.label.scale = 1.6;
-          }
-        }
-      });
+      updateLotLabelsVisibility();
 
       // Control Mykonos marker visibility
       if (mykonosMarker && mykonosMarker.billboard) {
@@ -1371,37 +1405,8 @@ window.addLotToMap = function addLotToMap(feature) {
       clampToGround: true,
     });
 
-    // Añadir label encima del polígono
-    const center = window.Cesium.BoundingSphere.fromPoints(positions).center;
-    const labelCarto = window.Cesium.Cartographic.fromCartesian(center);
-    const labelPos = window.Cesium.Cartographic.toCartesian(
-      new window.Cesium.Cartographic(
-        labelCarto.longitude,
-        labelCarto.latitude,
-        labelCarto.height + 5.0
-      )
-    );
-
-    const labelName = p.number || "";
-    if (labelName) {
-      viewer.entities.add({
-        position: labelPos,
-        properties: entity.properties,
-        label: {
-          text: labelName,
-          font: getLabelFont(),
-          fillColor: window.Cesium.Color.WHITE,
-          outlineColor: window.Cesium.Color.GRAY,
-          outlineWidth: getLabelOutlineWidth(),
-          style: window.Cesium.LabelStyle.FILL_AND_OUTLINE,
-          verticalOrigin: window.Cesium.VerticalOrigin.CENTER,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          scale: getLabelScale(),
-          heightReference: window.Cesium.HeightReference.NONE,
-          show: true,
-        },
-      });
-    }
+    removeLotLabelByFid(p.fid);
+    createLotLabelEntity(entity, positions);
 
     // Añadir al GeoJSON local para filtros y búsquedas
     if (lotesData) {
@@ -1440,6 +1445,7 @@ window.removeLotFromMap = function removeLotFromMap(fid) {
   if (entity) {
     lotesDataSource.entities.remove(entity);
   }
+  removeLotLabelByFid(fidKey);
   if (lotesData?.features) {
     lotesData.features = lotesData.features.filter(
       (feature) => String(feature?.properties?.fid) !== fidKey
