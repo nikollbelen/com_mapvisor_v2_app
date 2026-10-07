@@ -100,7 +100,7 @@ let selectedOriginalMaterial = null;
 /** Cuadrícula colorida activa por defecto (los polígonos cargan con colores de estado). */
 let lotGridActive = true;
 window.polygonLabels = window.polygonLabels || [];
-const LOT_LABEL_MAX_DISTANCE = 2000;
+const LOT_LABEL_MAX_DISTANCE = 1000;
 
 function isLotGridActive() {
   // Usar siempre la variable JS, no el DOM (el botón React usa clases distintas a "active")
