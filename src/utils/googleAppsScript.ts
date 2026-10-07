@@ -50,26 +50,37 @@ function valuesMatch(sheetValue: unknown, payloadValue: unknown) {
   );
 }
 
-export async function confirmGoogleAppsScriptWrite(
-  scriptUrl: string,
-  payload: Record<string, unknown>
-): Promise<boolean> {
-  const fid = payload.fid;
-  if (fid == null || fid === "") return false;
-
+async function fetchGoogleAppsScriptRows(scriptUrl: string) {
   const resp = await fetch(scriptUrl, {
     method: "GET",
     cache: "no-store",
   });
-  if (!resp.ok) return false;
+  if (!resp.ok) return [];
 
   const rows = await resp.json();
-  if (!Array.isArray(rows)) return false;
+  return Array.isArray(rows) ? rows : [];
+}
 
-  const row = rows.find((candidate) => {
+async function findGoogleAppsScriptRow(scriptUrl: string, fid: unknown) {
+  if (fid == null || fid === "") return false;
+
+  const rows = await fetchGoogleAppsScriptRows(scriptUrl);
+
+  return rows.find((candidate) => {
     if (!candidate || typeof candidate !== "object") return false;
     return valuesMatch(getSheetValue(candidate as Record<string, unknown>, "fid"), fid);
   }) as Record<string, unknown> | undefined;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+export async function confirmGoogleAppsScriptWrite(
+  scriptUrl: string,
+  payload: Record<string, unknown>
+): Promise<boolean> {
+  const row = await findGoogleAppsScriptRow(scriptUrl, payload.fid);
   if (!row) return false;
 
   if (payload.action === "addLot") {
@@ -79,4 +90,22 @@ export async function confirmGoogleAppsScriptWrite(
   return ["nombre", "estado", "precio", "area", "etapa", "coordenadas", "media"]
     .filter((key) => payload[key] != null)
     .every((key) => valuesMatch(getSheetValue(row, key), payload[key]));
+}
+
+export async function confirmGoogleAppsScriptDelete(
+  scriptUrl: string,
+  fid: unknown,
+  attempts = 4
+): Promise<boolean> {
+  if (fid == null || fid === "") return false;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const row = await findGoogleAppsScriptRow(scriptUrl, fid);
+    if (!row) return true;
+    if (attempt < attempts - 1) {
+      await wait(750);
+    }
+  }
+
+  return false;
 }

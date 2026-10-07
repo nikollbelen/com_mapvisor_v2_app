@@ -12,6 +12,10 @@ import "./LotInfoModal.css";
 import ContactModal from "../ContactModal/ContactModal";
 import { useAuth } from "../../../contexts/AuthContext";
 import { getLotStatusBadgeStyle } from "../../../constants/lotStatusColors";
+import {
+  confirmGoogleAppsScriptDelete,
+  postToGoogleAppsScript,
+} from "../../../utils/googleAppsScript";
 
 interface LotInfoModalProps {
   isVisible?: boolean;
@@ -535,11 +539,8 @@ const LotInfoModal = ({
         console.warn("[LotInfoModal] No se pudo borrar multimedia en R2");
       }
 
-      const sheetResp = await fetch(scriptUrl, {
-        method: "POST",
-        redirect: "follow",
-        body: JSON.stringify({ action: "deleteLot", fid: loteData.id }),
-      });
+      const payload = { action: "deleteLot", fid: loteData.id };
+      const sheetResp = await postToGoogleAppsScript(scriptUrl, payload);
       let result: { ok?: boolean; error?: string } = {};
       try {
         result = await sheetResp.json();
@@ -547,7 +548,17 @@ const LotInfoModal = ({
         /* Google Apps Script redirect can return an empty response */
       }
       if (!sheetResp.ok || result.ok === false) {
-        throw new Error(result.error || "No se pudo eliminar el lote");
+        const deleteWasPersisted = await confirmGoogleAppsScriptDelete(
+          scriptUrl,
+          loteData.id
+        );
+        if (!deleteWasPersisted) {
+          throw new Error(result.error || "No se pudo eliminar el lote");
+        }
+        console.warn(
+          "[LotInfoModal] Apps Script devolvió error al eliminar, pero el lote ya no existe en Google Sheets.",
+          result.error || sheetResp.status
+        );
       }
 
       if (window.removeLotFromMap) {
