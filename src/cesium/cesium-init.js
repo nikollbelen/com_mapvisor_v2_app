@@ -940,33 +940,6 @@ async function loadLotesData() {
         : window.Cesium.Cartesian3.fromDegrees(AREQUIPA_LNG, AREQUIPA_LAT, 0);
     const MAX_DISTANCE = 2000;
     const MARKER_SHOW_DISTANCE = 2500;
-    let mykonosMarker = null;
-    if (lotesPositions.length > 0) {
-      mykonosMarker = viewer.entities.add({
-        id: "mykonos_marker",
-        name: "Mykonos",
-        position: referencePoint,
-        billboard: {
-          image: "images/mikonos_marker.png",
-          width: 300,
-          height: 400,
-          verticalOrigin: window.Cesium.VerticalOrigin.BOTTOM,
-          horizontalOrigin: window.Cesium.HorizontalOrigin.CENTER,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          alignedAxis: window.Cesium.Cartesian3.ZERO,
-          pixelOffset: window.Cesium.Cartesian2.ZERO,
-          eyeOffset: window.Cesium.Cartesian3.ZERO,
-          scaleByDistance: new window.Cesium.NearFarScalar(
-            100.0,
-            1.0,
-            2000.0,
-            0.5
-          ),
-          heightReference: window.Cesium.HeightReference.CLAMP_TO_GROUND,
-          show: true,
-        },
-      });
-    }
     const NEAR_DISTANCE = 200.0;
     const FAR_DISTANCE = 201.0;
 
@@ -981,33 +954,18 @@ async function loadLotesData() {
       // Control lot label visibility
       updateLotLabelsVisibility();
 
-      // Control Mykonos marker visibility
-      if (mykonosMarker && mykonosMarker.billboard) {
-        // Show Mykonos only when you are far away (>=10200m)
-        mykonosMarker.billboard.show = distance > MARKER_SHOW_DISTANCE;
-      }
-
       // Control visibility of all markers except environment
       const allEntities = viewer.entities.values;
       allEntities.forEach((entity) => {
         if (!entity.id || !entity.billboard) return;
 
-        // Logic for photo markers and common areas (disappear when Mykonos appears)
+        // Logic for photo markers and common areas
         if (entity.id.startsWith("marcador_foto_") || entity.id.startsWith("area_comun_")) {
-          if (distance > MARKER_SHOW_DISTANCE) {
-            entity.billboard.show = false;
-            if (entity.label) entity.label.show = false;
-          } else {
-            // Visible as long as Mykonos is not
-            entity.billboard.show = true;
-            if (entity.label) entity.label.show = true;
-          }
+          entity.billboard.show = distance < MARKER_SHOW_DISTANCE;
+          if (entity.label) entity.label.show = distance < MARKER_SHOW_DISTANCE;
         }
-        // Other markers (except environment and Mykonos)
-        else if (
-          !entity.id.startsWith("marcador_entorno_") &&
-          entity.id !== "mykonos_marker"
-        ) {
+        // Other markers (except environment)
+        else if (!entity.id.startsWith("marcador_entorno_")) {
           // Show markers when you are less than 550m away
           entity.billboard.show = distance < MAX_DISTANCE;
           if (entity.label) {
@@ -3044,22 +3002,8 @@ function showLocationModal(title, coordinates, tipo = null, imagen = null) {
   );
 }
 
-/** [lon, lat] del marcador principal del proyecto (Mykonos / centro de lotesv2). */
+/** [lon, lat] del centro del proyecto (lotesv2). */
 function getProjectMainMarkerLonLat() {
-  if (viewer) {
-    const marker = viewer.entities.getById("mykonos_marker");
-    if (marker?.position) {
-      const pos = marker.position.getValue(viewer.clock.currentTime);
-      if (pos) {
-        const carto = window.Cesium.Cartographic.fromCartesian(pos);
-        return [
-          window.Cesium.Math.toDegrees(carto.longitude),
-          window.Cesium.Math.toDegrees(carto.latitude),
-        ];
-      }
-    }
-  }
-
   if (lotesPositions.length > 0) {
     const center = window.Cesium.BoundingSphere.fromPoints(lotesPositions).center;
     const carto = window.Cesium.Cartographic.fromCartesian(center);
