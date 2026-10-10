@@ -13,6 +13,6 @@ binding = "MEDIA_BUCKET"
 bucket_name = "mapvisor-lotes-media"
 
 [vars]
-APP_ORIGIN = "https://tupu-app.vercel.app"
+APP_ORIGIN = "https://com-tupu-app.vercel.app"
 R2_PUBLIC_BASE_URL = "https://pub-fdfecabd0dae455d9f03a8ac4be9eae3.r2.dev"
 SESSION_COOKIE_NAME = "mapvisor_session"
