@@ -62,23 +62,33 @@ body {
 
 /* ===== VARIABLES CSS GLOBALES ===== */
 :root {
+  --tupu-primary: #2962ff;
+  --tupu-secondary: #8b5cf6;
+  --tupu-dark: #0b1230;
+  --tupu-background: #f8fafc;
+  --tupu-text-secondary: #64748b;
+  --tupu-gradient: linear-gradient(115deg, #2962ff 0%, #5b4af4 55%, #8b5cf6 100%);
+  --tupu-gradient-compact: linear-gradient(135deg, #2962ff 0%, #8b5cf6 100%);
+  --tupu-gradient-night: linear-gradient(135deg, #0b1230 0%, #2962ff 65%, #8b5cf6 100%);
+  --tupu-focus-ring: 0 0 0 3px rgb(41 98 255 / 25%);
+
   /* Colores de texto */
   --text-color: #1a202c;
   --text-secondary: #4a5568;
   --text-on-green: #ffffff;
   
   /* Colores de fondo (Light Premium Glassmorphism) */
-  --primary-green: #10b981;
-  --primary-green-hover: #059669;
+  --primary-green: var(--tupu-primary);
+  --primary-green-hover: #1e4fff;
   --glass-bg: rgba(255, 255, 255, 0.75);
   --glass-bg-solid: #ffffff;
   --glass-bg-light: rgba(255, 255, 255, 0.45);
-  --glass-bg-green: rgba(16, 185, 129, 0.15);
+  --glass-bg-green: rgba(41, 98, 255, 0.15);
   
   /* Colores de borde (Soft Material Borders) */
   --glass-border: rgba(0, 0, 0, 0.12);
   --glass-border-light: rgba(0, 0, 0, 0.06);
-  --glass-border-green: #10b981;
+  --glass-border-green: var(--tupu-primary);
   
   /* Sombras (Material 3 Elevation) */
   --shadow-dark: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
@@ -328,4 +338,95 @@ select::-ms-expand {
   -webkit-font-smoothing: antialiased;
 }
 
-.text-gold { color: #e9c176; }
+.text-gold { color: var(--tupu-primary); }
+
+/* ===== TUPU BRAND OVERRIDES FOR VISOR UI ===== */
+.hud-glass-panel,
+.hud-panel-modal,
+.add-lot-modal,
+.login-modal,
+.user-info-modal,
+.my-lots-modal,
+.lot-modal,
+.contact-modal,
+.confirm-dialog,
+.time-control-panel {
+  border-color: rgb(41 98 255 / 24%) !important;
+  box-shadow: 0 24px 60px rgb(11 18 48 / 42%), 0 0 0 1px rgb(255 255 255 / 5%) inset !important;
+}
+
+.hud-gold-gradient,
+.hud-gold-gradient-bg,
+.instructions-gradient-gold,
+.background-btn,
+.add-lot-btn-submit,
+.login-submit-btn,
+.user-info-logout,
+.confirm-dialog-confirm,
+.contact-submit-btn {
+  background: var(--tupu-gradient-compact) !important;
+  color: #fff !important;
+}
+
+.topbar-nav-btn--active,
+.mobile-menu-item.active,
+.mobile-menu-item-icon--user,
+.mobile-menu-brochure,
+.cam-ctrl-btn--accent {
+  background: var(--tupu-gradient-compact) !important;
+  color: #fff !important;
+  border-color: rgb(41 98 255 / 48%) !important;
+  box-shadow: 0 12px 30px rgb(41 98 255 / 28%) !important;
+}
+
+.topbar-nav-btn--active .font-label-caps,
+.topbar-nav-btn--active .material-symbols-outlined {
+  color: #fff !important;
+}
+
+.hud-panel-logo-container,
+.add-lot-header-icon,
+.login-logo,
+.user-info-avatar,
+.mobile-menu-item-icon--add-lot {
+  background: rgb(41 98 255 / 12%) !important;
+  border-color: rgb(41 98 255 / 30%) !important;
+  box-shadow: 0 0 18px rgb(41 98 255 / 18%) !important;
+}
+
+.hud-panel-logo-icon,
+.add-lot-header-icon .material-symbols-outlined,
+.login-logo-icon,
+.lot-modal-logo-icon,
+.mobile-menu-item-icon--add-lot,
+.cam-ctrl-btn:hover,
+.add-lot-section-label,
+.add-lot-media-chip .material-symbols-outlined,
+.add-lot-coords-preview strong {
+  color: var(--tupu-primary) !important;
+}
+
+.hud-panel-close,
+.hud-panel-minimize,
+.add-lot-close {
+  border-color: rgb(41 98 255 / 22%) !important;
+}
+
+.add-lot-input:focus,
+.add-lot-select:focus,
+.add-lot-textarea:focus,
+.add-lot-file-input:focus {
+  border-color: rgb(41 98 255 / 70%) !important;
+  background: rgb(41 98 255 / 6%) !important;
+  box-shadow: var(--tupu-focus-ring);
+}
+
+.add-lot-file-input::file-selector-button {
+  background: rgb(41 98 255 / 14%) !important;
+  color: var(--tupu-primary) !important;
+}
+
+.add-lot-coords-preview {
+  background: rgb(41 98 255 / 7%) !important;
+  border-color: rgb(41 98 255 / 22%) !important;
+}

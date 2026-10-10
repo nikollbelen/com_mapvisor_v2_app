@@ -9,7 +9,6 @@ export const TOPBAR_BUTTONS: {
   { id: "areas", label: "Áreas Comunes", icon: "park" },
   { id: "lotes", label: "Lotes", icon: "grid_view" },
   { id: "entorno", label: "Entorno", icon: "landscape" },
-  { id: "video", label: "Video", icon: "videocam" },
 ];
 
 export const DEFAULT_TOPBAR_VISIBILITY: Record<TopbarButtonId, boolean> = {
@@ -17,5 +16,4 @@ export const DEFAULT_TOPBAR_VISIBILITY: Record<TopbarButtonId, boolean> = {
   areas: false,
   lotes: true,
   entorno: false,
-  video: true,
 };

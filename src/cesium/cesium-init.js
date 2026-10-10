@@ -24,8 +24,12 @@ try {
   });
   viewer.imageryLayers.removeAll(false);
   viewer.imageryLayers.add(labeledImageryLayer);
+  viewer.scene.requestRender();
 } catch (error) {
-  console.warn("[Cesium] No se pudo cargar Bing Aerial with Labels; se mantiene la capa base por defecto.", error);
+  console.warn(
+    "[Cesium] No se pudo cargar Bing Aerial with Labels; se mantiene la capa base por defecto.",
+    error
+  );
 }
 
 // Activar el efecto Bloom (resplandor) en el viewer para el brillo neón
@@ -154,6 +158,7 @@ function clearSelectedLotHighlight() {
 
   selected = null;
   selectedOriginalMaterial = null;
+  if (viewer) viewer.scene.requestRender();
 }
 
 function focusLotEntity(entity) {
@@ -331,9 +336,18 @@ function buildLoteSelectedDetail(entity) {
     entity,
     nombre: getEntityProp(entity, "number") || "",
     direccion: getter(window.getDireccion, (e) => getEntityProp(e, "direccion")),
+    tipo_propiedad:
+      getEntityProp(entity, "tipo_propiedad") ||
+      getEntityProp(entity, "tipoPropiedad") ||
+      "",
+    operacion: getEntityProp(entity, "operacion") || "",
     area: getter(window.getArea, (e) => getEntityProp(e, "area")),
     precio: getter(window.getPrecio, (e) => getEntityProp(e, "precio")),
     estado: getter(window.getEstado, (e) => getEntityProp(e, "estado")),
+    ciudad: getEntityProp(entity, "ciudad") || "",
+    distrito: getEntityProp(entity, "distrito") || "",
+    dormitorios: getEntityProp(entity, "dormitorios") || "",
+    banos: getEntityProp(entity, "banos") || "",
     boundaries: getter(window.getColindancias, () => ({})),
     id: getter(window.getId, (e) => getEntityProp(e, "fid")),
     phase: getter(window.getPhase, () => "1"),
@@ -401,6 +415,37 @@ function handleLotCardClick(lotRef, lotLabel) {
 }
 
 window.handleLotCardClick = handleLotCardClick;
+
+function findLotEntityByDeepLinkId(lotId) {
+  if (!lotesDataSource || lotId == null) return null;
+  const lotIdKey = String(lotId).trim();
+  if (!lotIdKey) return null;
+
+  return (
+    lotesDataSource.entities.values.find((entity) => {
+      if (!entity.polygon) return false;
+      const entityApiId = window.getId ? window.getId(entity) : undefined;
+      const entityFid = getEntityProp(entity, "fid");
+      const entityId = getEntityProp(entity, "id");
+
+      return [entityApiId, entityFid, entityId]
+        .filter((value) => value !== undefined && value !== null && value !== "")
+        .some((value) => String(value).trim() === lotIdKey);
+    }) || null
+  );
+}
+
+function selectLotById(lotId) {
+  const lotEntity = findLotEntityByDeepLinkId(lotId);
+  if (!lotEntity) {
+    console.warn("[DeepLink] No se encontró el lote para highlight:", lotId);
+    return false;
+  }
+
+  console.info("[DeepLink] Lote encontrado, abriendo detalle:", lotId);
+  selectLotOnMap(lotEntity, { toggleIfSame: false, flyTo: true, topDown: true });
+  return true;
+}
 
 // Functions to detect device type and adjust label properties
 function getDeviceType() {
@@ -729,33 +774,36 @@ function compareLotsByLocation(a, b, isAscending = true) {
 }
 
 async function fetchSheetsLotsWithRetry() {
-  const scriptUrl = import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL;
-  if (!scriptUrl) return [];
+  return [];
+}
+
+const MAPVISOR_API_BASE_URL = (
+  import.meta.env.VITE_MAPVISOR_API_URL ||
+  "https://mapvisor-api.mapvisor-nikoll.workers.dev"
+).replace(/\/$/, "");
+
+async function fetchMapvisorLotsWithRetry() {
   let tries = 0;
 
   while (true) {
     try {
-      const resp = await fetch(scriptUrl, { cache: "no-store" });
+      const resp = await fetch(`${MAPVISOR_API_BASE_URL}/api/lots`, {
+        cache: "no-store",
+        credentials: "include",
+      });
       if (!resp.ok) {
         throw new Error(`HTTP ${resp.status}`);
       }
 
       const parsed = await resp.json();
-      const lots = Array.isArray(parsed) ? parsed : [];
-      if (!Array.isArray(parsed)) {
-        console.warn("[SHEETS] La respuesta no es un array:", parsed);
-        throw new Error("Respuesta de Google Sheets inválida");
-      }
-
-      console.log(`[SHEETS] ${lots.length} filas cargadas desde Google Sheets`);
-      return lots;
+      return Array.isArray(parsed?.lots) ? parsed.lots : [];
     } catch (e) {
-      tries++;
-      const delay = Math.min(1500 + tries * 500, 5000);
-      console.warn(
-        `[SHEETS] Intento inicial ${tries} fallido. Reintentando en ${Math.round(delay / 1000)}s...`,
-        e
-      );
+      tries += 1;
+      if (tries >= 3) {
+        console.warn("[Cloudflare] No se pudo cargar lotes desde D1:", e);
+        return [];
+      }
+      const delay = tries === 1 ? 600 : 1200;
       window.dispatchEvent(
         new CustomEvent("sheetsLoadingRetry", {
           detail: { attempt: tries, delay, error: e instanceof Error ? e.message : String(e) },
@@ -769,7 +817,7 @@ async function fetchSheetsLotsWithRetry() {
 function parseSheetCoordString(raw) {
   if (!raw || typeof raw !== "string") return null;
   const ring = [];
-  for (const part of raw.split("|")) {
+  for (const part of raw.split(/[|\n]+/)) {
     const trimmed = part.trim();
     if (!trimmed) continue;
     const match = trimmed.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
@@ -788,9 +836,10 @@ function parseSheetCoordString(raw) {
 function populateFidToApiPropsFromSheet(lots) {
   fidToApiProps.clear();
   (lots || []).forEach((lot) => {
-    const fidKey = String(lot["FID"] || lot["fid"] || "");
+    const fidKey = String(lot["FID"] || lot["fid"] || lot.id || "");
     if (!fidKey) return;
     fidToApiProps.set(fidKey, {
+      id: lot.id,
       fid: fidKey,
       number:
         lot["Número"] ||
@@ -826,13 +875,14 @@ function buildGeoJsonFromSheetLots(lots) {
     );
     if (!ring) return;
 
-    const fid = lot["FID"] || lot["fid"] || Date.now() + idx;
+    const fid = lot["FID"] || lot["fid"] || lot.id || Date.now() + idx;
     const api = fidToApiProps.get(String(fid));
     const nombre =
       lot["Número"] ||
       lot["Numero"] ||
       lot["nombre"] ||
       lot["Nombre"] ||
+      lot.nombre ||
       api?.number ||
       "";
     const estado = normalizeLotStatus(
@@ -853,11 +903,25 @@ function buildGeoJsonFromSheetLots(lots) {
         lote: loteNum,
         manzana,
         direccion: lot["Dirección"] || lot["Direccion"] || nombre,
+        tipo_propiedad: lot.tipo_propiedad || lot.tipoPropiedad || "",
+        tipoPropiedad: lot.tipo_propiedad || lot.tipoPropiedad || "",
+        operacion: lot.operacion || "",
         area,
         precio,
         estado,
+        ciudad: lot.ciudad || "",
+        distrito: lot.distrito || "",
+        dormitorios: lot.dormitorios || "",
+        banos: lot.banos || "",
         etapa,
         media,
+        _api: {
+          id: lot.id || fid,
+          phase: lot.phase || lot.etapa || etapa,
+          project_id: lot.project_id,
+          updated_at: lot.updated_at,
+          is_active: lot.is_active,
+        },
       },
       geometry: {
         type: "Polygon",
@@ -870,7 +934,7 @@ function buildGeoJsonFromSheetLots(lots) {
 
 async function loadLotesData() {
   try {
-    const lots = await fetchSheetsLotsWithRetry();
+    const lots = await fetchMapvisorLotsWithRetry();
     populateFidToApiPropsFromSheet(lots);
     lotesData = buildGeoJsonFromSheetLots(lots);
 
@@ -912,6 +976,17 @@ async function loadLotesData() {
           phaseOrder,
           blockCode,
           lotIndex,
+          propertyType: p.tipo_propiedad || p.tipoPropiedad || "",
+          operation: p.operacion || "",
+          city: p.ciudad || "",
+          district: p.distrito || "",
+          bedrooms: parseLotNumericValue(p.dormitorios),
+          bathrooms: parseLotNumericValue(p.banos),
+          phase: p.etapa || p.phase || (p._api && p._api.phase) || "",
+          block: manzana,
+          lotCode: lote,
+          media: p.media || "",
+          hasMedia: Boolean(p.media && String(p.media).trim()),
         };
       });
     updateLotRangeConfigFromProcessedLots();
@@ -1298,6 +1373,17 @@ function updateLotFromWebSocket(lotData) {
             phaseOrder,
             blockCode,
             lotIndex,
+            propertyType: p.tipo_propiedad || p.tipoPropiedad || "",
+            operation: p.operacion || "",
+            city: p.ciudad || "",
+            district: p.distrito || "",
+            bedrooms: parseLotNumericValue(p.dormitorios),
+            bathrooms: parseLotNumericValue(p.banos),
+            phase: p.etapa || p.phase || (p._api && p._api.phase) || "",
+            block: manzana,
+            lotCode: lote,
+            media: p.media || "",
+            hasMedia: Boolean(p.media && String(p.media).trim()),
           };
         });
 
@@ -1348,10 +1434,17 @@ window.addLotToMap = function addLotToMap(feature) {
         number:  p.number,
         lote:    p.lote,
         manzana: p.manzana || "",
+        tipo_propiedad: p.tipo_propiedad || p.tipoPropiedad || "",
+        tipoPropiedad: p.tipo_propiedad || p.tipoPropiedad || "",
+        operacion: p.operacion || "",
         estado:  estado,
         status:  estado,
         precio:  parseLotNumericValue(p.precio),
         area:    p.area || "",
+        ciudad:  p.ciudad || "",
+        distrito: p.distrito || "",
+        dormitorios: p.dormitorios || "",
+        banos:   p.banos || "",
         etapa:   p.etapa || "",
         media:   p.media || "",
       }),
@@ -1397,6 +1490,17 @@ window.addLotToMap = function addLotToMap(feature) {
       phaseOrder: normalizePhaseValue(p.etapa),
       blockCode: "",
       lotIndex: 0,
+      propertyType: p.tipo_propiedad || p.tipoPropiedad || "",
+      operation: p.operacion || "",
+      city: p.ciudad || "",
+      district: p.distrito || "",
+      bedrooms: parseLotNumericValue(p.dormitorios),
+      bathrooms: parseLotNumericValue(p.banos),
+      phase: p.etapa || "",
+      block: p.manzana || "",
+      lotCode: p.lote || "",
+      media: p.media || "",
+      hasMedia: Boolean(p.media && String(p.media).trim()),
     });
     updateLotRangeConfigFromProcessedLots();
 
@@ -1723,10 +1827,10 @@ loadLotesData();
 
 // Polling de Google Sheets para actualizaciones en tiempo real (cada 10 segundos)
 async function pollGoogleSheet() {
-  if (!lotesDataSource || !lotesDataSource.entities) return;
+  return;
 
   try {
-    const scriptUrl = import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL;
+    const scriptUrl = "";
     const scriptResp = await fetch(scriptUrl, { cache: "no-store" });
     if (!scriptResp.ok) return;
 
@@ -1879,13 +1983,10 @@ async function pollGoogleSheet() {
 
 // Función para iniciar el polling evitando condiciones de carrera (superposición de peticiones)
 async function startPolling() {
-  await pollGoogleSheet();
-  // Llamar nuevamente cada 1 segundo DESPUÉS de que termina la petición anterior
-  setTimeout(startPolling, 1000);
+  return;
 }
 
-// Iniciar el polling
-setTimeout(startPolling, 1000);
+// Google Sheets dejó de ser fuente de datos; los lotes se cargan desde Cloudflare D1.
 
 
 function extractLotesPositions(lotesData) {
@@ -2632,6 +2733,33 @@ function handleLotes() {
   window.dispatchEvent(new CustomEvent("openLotSearchModal"));
 }
 
+function normalizeFilterText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function getFilterInputValue(nameOrId) {
+  const el =
+    document.querySelector(`[name="${nameOrId}"]`) ||
+    document.getElementById(nameOrId);
+  return el ? el.value || "" : "";
+}
+
+function includesFilterText(source, filter) {
+  const normalizedFilter = normalizeFilterText(filter);
+  if (!normalizedFilter) return true;
+  return normalizeFilterText(source).includes(normalizedFilter);
+}
+
+function getSelectedDataValues(selector, dataAttribute) {
+  return Array.from(document.querySelectorAll(selector))
+    .map((btn) => btn.getAttribute(dataAttribute))
+    .filter(Boolean);
+}
+
 // Lot filtering and search functions
 function applyFilters(lots) {
   const priceMin = parseLotNumericValue(
@@ -2650,6 +2778,23 @@ function applyFilters(lots) {
   const selectedStatus = Array.from(
     document.querySelectorAll(".status-btn.active")
   ).map((btn) => btn.getAttribute("data-status"));
+  const selectedPropertyTypes = getSelectedDataValues(
+    ".property-type-btn.active",
+    "data-property-type"
+  );
+  const selectedOperations = getSelectedDataValues(
+    ".operation-btn.active",
+    "data-operation"
+  );
+  const query = getFilterInputValue("lotSearchQuery");
+  const cityFilter = getFilterInputValue("cityFilter");
+  const districtFilter = getFilterInputValue("districtFilter");
+  const phaseFilter = getFilterInputValue("phaseFilter");
+  const blockFilter = getFilterInputValue("blockFilter");
+  const lotFilter = getFilterInputValue("lotFilter");
+  const bedroomsMin = parseLotNumericValue(getFilterInputValue("bedroomsMin"));
+  const bathroomsMin = parseLotNumericValue(getFilterInputValue("bathroomsMin"));
+  const mediaFilter = getFilterInputValue("mediaFilter") || "all";
 
   const filtered = lots.filter((lot) => {
     const reasons = [];
@@ -2661,6 +2806,41 @@ function applyFilters(lots) {
 
     // Status filter — if nothing selected, show nothing; otherwise must match
     if (!selectedStatus.includes(lot.status)) reasons.push("estado");
+    if (selectedPropertyTypes.length === 0) {
+      reasons.push("tipo");
+    } else if (lot.propertyType && !selectedPropertyTypes.includes(lot.propertyType)) {
+      reasons.push("tipo");
+    }
+    if (selectedOperations.length === 0) {
+      reasons.push("operacion");
+    } else if (lot.operation && !selectedOperations.includes(lot.operation)) {
+      reasons.push("operacion");
+    }
+    if (!includesFilterText(lot.city, cityFilter)) reasons.push("ciudad");
+    if (!includesFilterText(lot.district, districtFilter)) reasons.push("distrito");
+    if (!includesFilterText(lot.phase, phaseFilter)) reasons.push("etapa");
+    if (!includesFilterText(lot.block || lot.blockCode, blockFilter)) reasons.push("manzana");
+    if (!includesFilterText(lot.lotCode || lot.lotIndex, lotFilter)) reasons.push("lote");
+
+    if (bedroomsMin > 0 && (lot.bedrooms || 0) < bedroomsMin) reasons.push("dormitorios");
+    if (bathroomsMin > 0 && (lot.bathrooms || 0) < bathroomsMin) reasons.push("banos");
+    if (mediaFilter === "with" && !lot.hasMedia) reasons.push("media");
+    if (mediaFilter === "without" && lot.hasMedia) reasons.push("media");
+
+    if (normalizeFilterText(query)) {
+      const searchIndex = [
+        lot.number,
+        lot.propertyType,
+        lot.operation,
+        lot.status,
+        lot.city,
+        lot.district,
+        lot.phase,
+        lot.block,
+        lot.lotCode,
+      ].join(" ");
+      if (!includesFilterText(searchIndex, query)) reasons.push("busqueda");
+    }
 
     if (reasons.length) return false;
 
@@ -3156,7 +3336,7 @@ function closeVideoOverlay() {
 // Función para seleccionar un lote por entidad (usada desde URL highlight)
 function selectLotByEntity(entity) {
   if (!entity || !entity.polygon) return;
-  selectLotOnMap(entity, { toggleIfSame: false, flyTo: false });
+  selectLotOnMap(entity, { toggleIfSame: false, flyTo: true, topDown: true });
 }
 
 // Expose additional functions globally
@@ -3166,6 +3346,7 @@ window.flyToView = flyToView;
 window.flyToLotEntity = flyToLotEntity;
 window.flyToLotEntityTopDown = flyToLotEntityTopDown;
 window.flyToSelectedLotEntityTopDown = flyToSelectedLotEntityTopDown;
+window.clearSelectedLotHighlight = clearSelectedLotHighlight;
 window.flyToMarkersView = flyToMarkersView;
 window.reiniciarMenu = reiniciarMenu;
 window.handleFotos = handleFotos;
@@ -3174,6 +3355,7 @@ window.handleLotes = handleLotes;
 window.handleEntorno = handleEntorno;
 window.handleVideo = handleVideo;
 window.selectLotByEntity = selectLotByEntity;
+window.selectLotById = selectLotById;
 window.clickMarcadores360 = clickMarcadores360;
 window.clickMarcadoresAreasComunes = clickMarcadoresAreasComunes;
 window.openOverlay360 = openOverlay360;

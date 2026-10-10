@@ -15,9 +15,11 @@ import ImageOverlay from "./components/Overlays/ImageOverlay/ImageOverlay";
 import Photos360Overlay from "./components/Overlays/Photos360Overlay/Photos360Overlay";
 import TimeOfDayControl from "./components/Overlays/TimeOfDayControl/TimeOfDayControl";
 import AddLotModal from "./components/Modals/AddLotModal/AddLotModal";
+import PublicSite, { getPublicPageFromPath } from "./pages/PublicSite/PublicSite";
 import "./components/Modals/AddLotModal/AddLotModal.css";
 import { useWebSocket } from "./hooks/useWebSocket";
 import "./components/Modals/shared/HudPanelModal.css";
+import "./brand-overrides.css";
 
 function AppContent() {
   // Inicializar WebSocket para recibir actualizaciones de lotes en tiempo real
@@ -27,7 +29,7 @@ function AppContent() {
   const urlParams = new URLSearchParams(window.location.search);
   const hasHighlight = urlParams.get('highlight') !== null;
   
-  const [showSplash, setShowSplash] = useState(true); // Siempre mostrar splash al inicio
+  const [showSplash, setShowSplash] = useState(!hasHighlight); // Saltar splash cuando se abre un lote directo
   const [showInstructions, setShowInstructions] = useState(!hasHighlight); // Solo ocultar instrucciones si hay highlight
   const [selectedLote, setSelectedLote] = useState(null);
   const [showLotInfoModal, setShowLotInfoModal] = useState(false);
@@ -178,6 +180,9 @@ function AppContent() {
 
   // Handler para limpiar todo el estado cuando se hace click en un lote
   const handleClearAllModals = () => {
+    setShowLotInfoModal(false);
+    setSelectedLote(null);
+    setWasLotSearchModalOpen(false);
     setShowPhotos360(false);
     setShowAreasModal(false);
     setShowAreasImage(false);
@@ -193,6 +198,9 @@ function AppContent() {
     setAreasImageSrc("");
     setAreasData(null);
     setEntornoData(null);
+    if (window.clearSelectedLotHighlight) {
+      window.clearSelectedLotHighlight();
+    }
   };
 
   // Función para seleccionar un lote por ID desde la URL
@@ -200,37 +208,51 @@ function AppContent() {
   const selectLotById = useCallback((lotId: string) => {
     let attempts = 0;
     const maxAttempts = 60; // Máximo 30 segundos (60 * 500ms)
+    const lotIdStr = String(lotId).trim();
+    console.info("[DeepLink] Buscando lote desde URL:", lotIdStr);
     
     const performSelection = () => {
       attempts++;
       
+      if (window.selectLotById) {
+        const didSelect = window.selectLotById(lotIdStr);
+        if (didSelect) return;
+      }
+
       // Verificar que las funciones necesarias estén disponibles
       if (!window.viewer || !window.getId || !window.selectLotByEntity) {
         if (attempts < maxAttempts) {
           setTimeout(performSelection, 500);
+        } else {
+          console.warn("[DeepLink] No se pudo seleccionar el lote: Cesium no quedó listo.", lotIdStr);
         }
         return;
       }
 
       try {
-        // Obtener todas las entidades del datasource
-        const datasource = window.viewer.dataSources.get(0);
-        if (!datasource || !datasource.entities || datasource.entities.values.length === 0) {
+        const allEntities = Array.from(
+          { length: window.viewer.dataSources.length },
+          (_, index) => window.viewer!.dataSources.get(index)
+        ).flatMap((source: any) => source?.entities?.values || []);
+
+        if (allEntities.length === 0) {
           if (attempts < maxAttempts) {
             setTimeout(performSelection, 500);
+          } else {
+            console.warn("[DeepLink] No hay entidades cargadas para buscar:", lotIdStr);
           }
           return;
         }
-
-        const allEntities = datasource.entities.values;
         
         // Buscar la entidad con el ID especificado
-        const lotIdStr = String(lotId).trim();
         const lotEntity = allEntities.find((entity: any) => {
           if (!entity || !entity.polygon) return false;
           try {
             const entityId = window.getId!(entity);
-            return entityId ? String(entityId).trim() === lotIdStr : false;
+            const entityFid = entity.properties?.fid?.getValue?.() ?? entity.properties?.fid;
+            return [entityId, entityFid]
+              .filter((value) => value !== undefined && value !== null && value !== "")
+              .some((value) => String(value).trim() === lotIdStr);
           } catch (e) {
             return false;
           }
@@ -244,6 +266,8 @@ function AppContent() {
           // Si no se encuentra, seguir intentando
           if (attempts < maxAttempts) {
             setTimeout(performSelection, 500);
+          } else {
+            console.warn("[DeepLink] No se encontró entidad para highlight:", lotIdStr);
           }
         }
       } catch (error) {
@@ -278,13 +302,6 @@ function AppContent() {
     if (highlightId) {
       // La función selectLotById esperará el evento cesiumReady antes de seleccionar
       selectLotById(highlightId);
-      
-      // Limpiar el parámetro de la URL después de usarlo (con un delay para asegurar que se procese)
-      setTimeout(() => {
-        urlParams.delete('highlight');
-        const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
-        window.history.replaceState({}, document.title, newUrl);
-      }, 2000);
     }
   }, [selectLotById]);
 
@@ -590,6 +607,19 @@ function AppContent() {
 }
 
 export default function App() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const shouldOpenApp =
+    window.location.pathname === "/app" ||
+    urlParams.has("highlight") ||
+    urlParams.has("publicar");
+  const publicPage = shouldOpenApp
+    ? null
+    : getPublicPageFromPath(window.location.pathname);
+
+  if (publicPage) {
+    return <PublicSite page={publicPage} />;
+  }
+
   return (
     <AuthProvider>
       <UiVisibilityProvider>

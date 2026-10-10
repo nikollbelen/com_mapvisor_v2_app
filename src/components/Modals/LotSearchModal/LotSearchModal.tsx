@@ -19,6 +19,19 @@ const SORT_OPTIONS = [
 ];
 
 const ALL_STATUSES = ['vendido', 'reservado', 'negociacion', 'disponible'] as const;
+const ALL_PROPERTY_TYPES = ['lote', 'casa', 'departamento'] as const;
+const ALL_OPERATIONS = ['venta', 'alquiler'] as const;
+
+const PROPERTY_TYPE_LABELS: Record<string, string> = {
+  lote: 'Lote',
+  casa: 'Casa',
+  departamento: 'Departamento',
+};
+
+const OPERATION_LABELS: Record<string, string> = {
+  venta: 'Venta',
+  alquiler: 'Alquiler',
+};
 
 const LotSearchModal = ({ isVisible = false, onClose }: LotSearchModalProps) => {
   const [priceMin, setPriceMin] = useState(DEFAULT_PRICE_BOUNDS.min);
@@ -30,6 +43,17 @@ const LotSearchModal = ({ isVisible = false, onClose }: LotSearchModalProps) => 
   const [sortBy, setSortBy] = useState('area-asc');
   const [sortOpen, setSortOpen] = useState(false);
   const [statuses, setStatuses] = useState<Set<string>>(new Set(ALL_STATUSES));
+  const [propertyTypes, setPropertyTypes] = useState<Set<string>>(new Set(ALL_PROPERTY_TYPES));
+  const [operations, setOperations] = useState<Set<string>>(new Set(ALL_OPERATIONS));
+  const [searchQuery, setSearchQuery] = useState('');
+  const [cityFilter, setCityFilter] = useState('');
+  const [districtFilter, setDistrictFilter] = useState('');
+  const [phaseFilter, setPhaseFilter] = useState('');
+  const [blockFilter, setBlockFilter] = useState('');
+  const [lotFilter, setLotFilter] = useState('');
+  const [bedroomsMin, setBedroomsMin] = useState('');
+  const [bathroomsMin, setBathroomsMin] = useState('');
+  const [mediaFilter, setMediaFilter] = useState('all');
   const [isMobile, setIsMobile] = useState(false);
   const sortRef = useRef<HTMLDivElement>(null);
 
@@ -162,7 +186,15 @@ const LotSearchModal = ({ isVisible = false, onClose }: LotSearchModalProps) => 
     setPriceMin(priceBounds.min); setPriceMax(priceBounds.max);
     setAreaMin(areaBounds.min); setAreaMax(areaBounds.max);
     setSortBy('area-asc'); setStatuses(new Set(ALL_STATUSES));
-    if (window.loadLotData) window.loadLotData();
+    setPropertyTypes(new Set(ALL_PROPERTY_TYPES)); setOperations(new Set(ALL_OPERATIONS));
+    setSearchQuery(''); setCityFilter(''); setDistrictFilter(''); setPhaseFilter('');
+    setBlockFilter(''); setLotFilter(''); setBedroomsMin(''); setBathroomsMin('');
+    setMediaFilter('all');
+    triggerFilterUpdate();
+  };
+
+  const triggerFilterUpdate = () => {
+    setTimeout(() => { if (window.loadLotData) window.loadLotData(); }, 0);
   };
 
   const handlePriceMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -192,7 +224,32 @@ const LotSearchModal = ({ isVisible = false, onClose }: LotSearchModalProps) => 
       if (next.has(s)) { next.delete(s); } else { next.add(s); }
       return next;
     });
-    setTimeout(() => { if (window.loadLotData) window.loadLotData(); }, 0);
+    triggerFilterUpdate();
+  };
+
+  const handlePropertyTypeToggle = (type: string) => {
+    setPropertyTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) { next.delete(type); } else { next.add(type); }
+      return next;
+    });
+    triggerFilterUpdate();
+  };
+
+  const handleOperationToggle = (operation: string) => {
+    setOperations(prev => {
+      const next = new Set(prev);
+      if (next.has(operation)) { next.delete(operation); } else { next.add(operation); }
+      return next;
+    });
+    triggerFilterUpdate();
+  };
+
+  const handleTextFilterChange = (setter: React.Dispatch<React.SetStateAction<string>>) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
+    setter(e.target.value);
+    triggerFilterUpdate();
   };
 
   const handleSortSelect = (value: string) => {
@@ -231,6 +288,23 @@ const LotSearchModal = ({ isVisible = false, onClose }: LotSearchModalProps) => 
       </div>
 
       <div className="lot-search-content">
+        <div className="filter-section">
+          <label className="filter-label" htmlFor="lotSearchQuery">Buscar</label>
+          <div className="search-input-shell">
+            <span className="material-symbols-outlined">search</span>
+            <input
+              id="lotSearchQuery"
+              name="lotSearchQuery"
+              className="lot-search-input"
+              type="search"
+              placeholder="Nombre, ciudad, distrito, etapa..."
+              value={searchQuery}
+              onChange={handleTextFilterChange(setSearchQuery)}
+              autoComplete="off"
+            />
+          </div>
+        </div>
+
         {/* Price range */}
         <div className="filter-section">
           <label className="filter-label">Precio</label>
@@ -266,6 +340,104 @@ const LotSearchModal = ({ isVisible = false, onClose }: LotSearchModalProps) => 
           <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>filter_alt_off</span>
           Limpiar filtros
         </button>
+
+        <div className="filter-grid">
+          <div className="filter-section">
+            <label className="filter-label">Tipo</label>
+            <div className="compact-pill-group">
+              {ALL_PROPERTY_TYPES.map(type => (
+                <button
+                  key={type}
+                  className={`compact-pill property-type-btn ${propertyTypes.has(type) ? 'active' : ''}`}
+                  data-property-type={type}
+                  onClick={() => handlePropertyTypeToggle(type)}
+                  type="button"
+                >
+                  {PROPERTY_TYPE_LABELS[type]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="filter-section">
+            <label className="filter-label">Operación</label>
+            <div className="compact-pill-group">
+              {ALL_OPERATIONS.map(operation => (
+                <button
+                  key={operation}
+                  className={`compact-pill operation-btn ${operations.has(operation) ? 'active' : ''}`}
+                  data-operation={operation}
+                  onClick={() => handleOperationToggle(operation)}
+                  type="button"
+                >
+                  {OPERATION_LABELS[operation]}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="filter-grid">
+          <div className="filter-section">
+            <label className="filter-label" htmlFor="cityFilter">Ciudad</label>
+            <input id="cityFilter" name="cityFilter" className="lot-search-input" value={cityFilter} onChange={handleTextFilterChange(setCityFilter)} placeholder="Todas" autoComplete="off" />
+          </div>
+
+          <div className="filter-section">
+            <label className="filter-label" htmlFor="districtFilter">Distrito</label>
+            <input id="districtFilter" name="districtFilter" className="lot-search-input" value={districtFilter} onChange={handleTextFilterChange(setDistrictFilter)} placeholder="Todos" autoComplete="off" />
+          </div>
+        </div>
+
+        <div className="filter-grid three">
+          <div className="filter-section">
+            <label className="filter-label" htmlFor="phaseFilter">Etapa</label>
+            <input id="phaseFilter" name="phaseFilter" className="lot-search-input" value={phaseFilter} onChange={handleTextFilterChange(setPhaseFilter)} placeholder="Todas" autoComplete="off" />
+          </div>
+
+          <div className="filter-section">
+            <label className="filter-label" htmlFor="blockFilter">Mz.</label>
+            <input id="blockFilter" name="blockFilter" className="lot-search-input" value={blockFilter} onChange={handleTextFilterChange(setBlockFilter)} placeholder="Todas" autoComplete="off" />
+          </div>
+
+          <div className="filter-section">
+            <label className="filter-label" htmlFor="lotFilter">Lote</label>
+            <input id="lotFilter" name="lotFilter" className="lot-search-input" value={lotFilter} onChange={handleTextFilterChange(setLotFilter)} placeholder="Todos" autoComplete="off" />
+          </div>
+        </div>
+
+        <div className="filter-grid three">
+          <div className="filter-section">
+            <label className="filter-label" htmlFor="bedroomsMin">Dorm.</label>
+            <select id="bedroomsMin" name="bedroomsMin" className="lot-search-input" value={bedroomsMin} onChange={handleTextFilterChange(setBedroomsMin)}>
+              <option value="">Cualquiera</option>
+              <option value="1">1+</option>
+              <option value="2">2+</option>
+              <option value="3">3+</option>
+              <option value="4">4+</option>
+            </select>
+          </div>
+
+          <div className="filter-section">
+            <label className="filter-label" htmlFor="bathroomsMin">Baños</label>
+            <select id="bathroomsMin" name="bathroomsMin" className="lot-search-input" value={bathroomsMin} onChange={handleTextFilterChange(setBathroomsMin)}>
+              <option value="">Cualquiera</option>
+              <option value="1">1+</option>
+              <option value="2">2+</option>
+              <option value="3">3+</option>
+              <option value="4">4+</option>
+            </select>
+          </div>
+
+          <div className="filter-section">
+            <label className="filter-label" htmlFor="mediaFilter">Media</label>
+            <select id="mediaFilter" name="mediaFilter" className="lot-search-input" value={mediaFilter} onChange={handleTextFilterChange(setMediaFilter)}>
+              <option value="all">Todos</option>
+              <option value="with">Con media</option>
+              <option value="without">Sin media</option>
+            </select>
+          </div>
+        </div>
 
         {/* Sort — custom dropdown */}
         <div className="filter-section">

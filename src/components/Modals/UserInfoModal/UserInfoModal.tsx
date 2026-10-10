@@ -6,7 +6,6 @@ interface UserInfoModalProps {
     id: string;
     full_name: string;
     email: string;
-    role?: string;
   };
   onClose: () => void;
   onLogout: () => void;
@@ -15,17 +14,9 @@ interface UserInfoModalProps {
 const UserInfoModal = ({ isVisible, user, onClose, onLogout }: UserInfoModalProps) => {
   if (!isVisible) return null;
 
-  const ADMIN_URL = import.meta.env.VITE_ADMIN_URL;
-  const isAdmin = user.role === "admin";
-  const roleLabel = isAdmin ? "Administrador" : "Vendedor";
-
   const handleLogout = () => {
     onLogout();
     onClose();
-  };
-
-  const handleGoToDashboard = () => {
-    if (ADMIN_URL) window.open(ADMIN_URL, "_blank");
   };
 
   return (
@@ -46,8 +37,8 @@ const UserInfoModal = ({ isVisible, user, onClose, onLogout }: UserInfoModalProp
           </div>
           <h2 className="user-info-title">{user.full_name}</h2>
           <p className="user-info-subtitle">{user.email}</p>
-          <span className={`user-info-role-badge ${isAdmin ? "admin" : "vendedor"}`}>
-            {roleLabel}
+          <span className="user-info-role-badge">
+            Usuario
           </span>
         </div>
 
@@ -61,19 +52,9 @@ const UserInfoModal = ({ isVisible, user, onClose, onLogout }: UserInfoModalProp
               <span className="user-info-field-label">Correo</span>
               <span className="user-info-field-value">{user.email}</span>
             </div>
-            <div className="user-info-field">
-              <span className="user-info-field-label">Rol</span>
-              <span className="user-info-field-value">{roleLabel}</span>
-            </div>
           </div>
 
           <div className="user-info-actions">
-            {isAdmin && ADMIN_URL && (
-              <button type="button" className="user-info-btn-primary" onClick={handleGoToDashboard}>
-                <span className="material-symbols-outlined">dashboard</span>
-                Ir al Dashboard
-              </button>
-            )}
             <button type="button" className="user-info-btn-logout" onClick={handleLogout}>
               <span className="material-symbols-outlined">logout</span>
               Cerrar sesión

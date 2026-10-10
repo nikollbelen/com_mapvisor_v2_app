@@ -8,17 +8,9 @@ export type DemoUserRecord = AppUser & { password: string };
 
 export const DEMO_USERS: DemoUserRecord[] = [
   {
-    id: "admin-1",
-    email: "admin@nautia.com",
-    password: "admin123",
-    full_name: "Administrador",
-    role: "admin",
-  },
-  {
-    id: "vendedor-1",
-    email: "vendedor@nautia.com",
-    password: "vendedor123",
-    full_name: "Vendedor Demo",
-    role: "vendedor",
+    id: "usuario-1",
+    email: "usuario@nautia.com",
+    password: "usuario123",
+    full_name: "Usuario Demo",
   },
 ];

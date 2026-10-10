@@ -76,7 +76,7 @@
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 32px;
   font-weight: 700;
-  color: #e9c176;
+  color: #8b5cf6;
 }
 
 .time-label {
@@ -85,7 +85,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: #9a8f80;
+  color: #94a3b8;
   margin-top: 4px;
 }
 
@@ -106,10 +106,10 @@
   -webkit-appearance: none;
   width: 16px;
   height: 16px;
-  background: #e9c176;
+  background: #2962ff;
   border-radius: 50%;
   cursor: pointer;
-  box-shadow: 0 0-10px rgba(233, 193, 118, 0.5);
+  box-shadow: 0 0 10px rgba(41, 98, 255, 0.5);
 }
 
 .slider-labels {
@@ -118,7 +118,7 @@
   margin-top: 8px;
   font-family: 'Manrope', sans-serif;
   font-size: 10px;
-  color: #4e4639;
+  color: #94a3b8;
 }
 
 .time-presets {
@@ -142,13 +142,13 @@
 
 .preset-btn:hover {
   background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(197, 160, 89, 0.3);
+  border-color: rgba(41, 98, 255, 0.3);
 }
 
 .preset-btn.active {
-  background: rgba(233, 193, 118, 0.1);
-  border-color: rgba(197, 160, 89, 0.5);
-  color: #e9c176;
+  background: rgba(41, 98, 255, 0.12);
+  border-color: rgba(41, 98, 255, 0.5);
+  color: #8b5cf6;
 }
 
 @media (max-width: 1024px) {

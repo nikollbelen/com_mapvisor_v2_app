@@ -5,21 +5,25 @@ import { useAuth } from "../../../contexts/AuthContext";
 interface LoginModalProps {
   isVisible: boolean;
   onClose: () => void;
+  onAuthenticated?: () => void;
 }
 
 interface LoginCredentials {
+  fullName: string;
   email: string;
   password: string;
 }
 
-const LoginModal = ({ isVisible, onClose }: LoginModalProps) => {
-  const { login } = useAuth();
+const LoginModal = ({ isVisible, onClose, onAuthenticated }: LoginModalProps) => {
+  const { login, register } = useAuth();
   const [credentials, setCredentials] = useState<LoginCredentials>({
+    fullName: '',
     email: '',
     password: ''
   });
 
   const [errors, setErrors] = useState({
+    fullName: '',
     email: '',
     password: '',
     login: ''
@@ -28,6 +32,7 @@ const LoginModal = ({ isVisible, onClose }: LoginModalProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
 
   // Validar email
   const validateEmail = (email: string) => {
@@ -39,7 +44,11 @@ const LoginModal = ({ isVisible, onClose }: LoginModalProps) => {
   const validateField = (field: string, value: string) => {
     const newErrors = { ...errors };
     
-    if (field === 'email') {
+    if (field === 'fullName') {
+      newErrors.fullName = value && value.trim().length < 3
+        ? 'Ingrese su nombre completo'
+        : '';
+    } else if (field === 'email') {
       newErrors.email = value && !validateEmail(value)
         ? 'Ingrese un correo electrónico válido'
         : '';
@@ -56,12 +65,17 @@ const LoginModal = ({ isVisible, onClose }: LoginModalProps) => {
     e.preventDefault();
     
     // Limpiar errores anteriores
-    setErrors({ email: '', password: '', login: '' });
+    setErrors({ fullName: '', email: '', password: '', login: '' });
     
     // Validar campos
-    const hasErrors = !!(errors.email || errors.password);
+    const hasErrors = !!(errors.fullName || errors.email || errors.password);
     
-    if (hasErrors || !credentials.email || !credentials.password) {
+    if (
+      hasErrors ||
+      (isRegisterMode && !credentials.fullName.trim()) ||
+      !credentials.email ||
+      !credentials.password
+    ) {
       alert('Por favor complete todos los campos correctamente');
       return;
     }
@@ -69,19 +83,21 @@ const LoginModal = ({ isVisible, onClose }: LoginModalProps) => {
     setIsLoading(true);
     
     try {
-      const success = await login(credentials.email, credentials.password);
+      const success = isRegisterMode
+        ? await register(credentials.fullName, credentials.email, credentials.password)
+        : await login(credentials.email, credentials.password);
       
-      if (success) {
-        // Login exitoso
+      if (success === true || (typeof success === "object" && success.ok)) {
+        onAuthenticated?.();
         onClose();
-        
-        // Limpiar formulario
-        setCredentials({ email: '', password: '' });
+        setCredentials({ fullName: '', email: '', password: '' });
+        setIsRegisterMode(false);
       } else {
-        // Credenciales incorrectas
         setErrors(prev => ({ 
           ...prev, 
-          login: 'Correo electrónico o contraseña incorrectos' 
+          login: typeof success === "object" && success.error
+            ? success.error
+            : 'Correo electrónico o contraseña incorrectos'
         }));
       }
     } catch (error) {
@@ -102,6 +118,12 @@ const LoginModal = ({ isVisible, onClose }: LoginModalProps) => {
 
   if (!isVisible) return null;
 
+  const toggleRegisterMode = () => {
+    setIsRegisterMode((prev) => !prev);
+    setShowForgot(false);
+    setErrors({ fullName: '', email: '', password: '', login: '' });
+  };
+
   return (
     <div className="login-modal-overlay">
       <div className="login-modal">
@@ -111,12 +133,18 @@ const LoginModal = ({ isVisible, onClose }: LoginModalProps) => {
 
         <div className="login-hero">
           <div className="login-logo-container">
-            <span className="material-symbols-outlined login-logo-icon">domain</span>
+            <span className="login-logo-mark" aria-hidden="true" />
           </div>
           {!showForgot ? (
             <>
-              <h1 className="login-title">Bienvenido a Nautia Condominios</h1>
-              <p className="login-subtitle">El visor inmersivo que conecta tus proyectos con la realidad</p>
+              <h1 className="login-title">
+                {isRegisterMode ? 'Crear cuenta' : 'Inicio de sesión'}
+              </h1>
+              <p className="login-subtitle">
+                {isRegisterMode
+                  ? 'Regístrate para agregar lotes y ver tus publicaciones'
+                  : 'Ingresa para gestionar tus lotes dentro del visor'}
+              </p>
             </>
           ) : (
             <>
@@ -130,20 +158,41 @@ const LoginModal = ({ isVisible, onClose }: LoginModalProps) => {
           {!showForgot ? (
             <form className="login-form" onSubmit={handleSubmit}>
               <div className="input-group">
-                <label className="form-label" htmlFor="email">Usuario / Email</label>
-                <input
-                  id="email"
-                  type="email"
-                  className={`form-input ${errors.email ? 'error' : ''}`}
-                  placeholder="ejemplo@correo.com"
-                  value={credentials.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  disabled={isLoading}
-                />
-                {errors.email && <div className="error-message">{errors.email}</div>}
+                {isRegisterMode && (
+                  <div className="login-field">
+                    <label className="form-label" htmlFor="fullName">Nombre completo</label>
+                    <input
+                      id="fullName"
+                      type="text"
+                      className={`form-input ${errors.fullName ? 'error' : ''}`}
+                      placeholder="Tu nombre"
+                      value={credentials.fullName}
+                      onChange={(e) => handleInputChange('fullName', e.target.value)}
+                      disabled={isLoading}
+                      autoComplete="name"
+                    />
+                    {errors.fullName && <div className="error-message">{errors.fullName}</div>}
+                  </div>
+                )}
 
-                <label className="form-label" htmlFor="password">Contraseña</label>
-                <div className="password-input-wrapper">
+                <div className="login-field">
+                  <label className="form-label" htmlFor="email">Usuario / Email</label>
+                  <input
+                    id="email"
+                    type="email"
+                    className={`form-input ${errors.email ? 'error' : ''}`}
+                    placeholder="ejemplo@correo.com"
+                    value={credentials.email}
+                    onChange={(e) => handleInputChange('email', e.target.value)}
+                    disabled={isLoading}
+                    autoComplete="email"
+                  />
+                  {errors.email && <div className="error-message">{errors.email}</div>}
+                </div>
+
+                <div className="login-field">
+                  <label className="form-label" htmlFor="password">Contraseña</label>
+                  <div className="password-input-wrapper">
                   <input
                     id="password"
                     type={showPassword ? "text" : "password"}
@@ -152,6 +201,7 @@ const LoginModal = ({ isVisible, onClose }: LoginModalProps) => {
                     value={credentials.password}
                     onChange={(e) => handleInputChange('password', e.target.value)}
                     disabled={isLoading}
+                    autoComplete={isRegisterMode ? "new-password" : "current-password"}
                   />
                   <button
                     type="button"
@@ -164,22 +214,29 @@ const LoginModal = ({ isVisible, onClose }: LoginModalProps) => {
                       {showPassword ? 'visibility_off' : 'visibility'}
                     </span>
                   </button>
+                  </div>
+                  {errors.password && <div className="error-message">{errors.password}</div>}
                 </div>
-                {errors.password && <div className="error-message">{errors.password}</div>}
               </div>
 
               <div className="login-row">
-                <label className="remember">
-                  <input
-                    type="checkbox"
-                    className="remember-checkbox"
-                    defaultChecked
-                  />
-                  Recordarme
-                </label>
-                <button type="button" className="forgot" onClick={() => setShowForgot(true)}>
-                  Olvidé mi contraseña
-                </button>
+                {!isRegisterMode ? (
+                  <>
+                    <label className="remember">
+                      <input
+                        type="checkbox"
+                        className="remember-checkbox"
+                        defaultChecked
+                      />
+                      Recordarme
+                    </label>
+                    <button type="button" className="forgot" onClick={() => setShowForgot(true)}>
+                      Olvidé mi contraseña
+                    </button>
+                  </>
+                ) : (
+                  <p className="login-static-note">La cuenta se guardará localmente en este navegador.</p>
+                )}
               </div>
 
               {errors.login && (
@@ -195,7 +252,16 @@ const LoginModal = ({ isVisible, onClose }: LoginModalProps) => {
                   className="btn-submit" 
                   disabled={isLoading}
                 >
-                  {isLoading ? 'INGRESANDO...' : 'INGRESAR'}
+                  {isLoading
+                    ? (isRegisterMode ? 'CREANDO...' : 'INGRESANDO...')
+                    : (isRegisterMode ? 'CREAR CUENTA' : 'INGRESAR')}
+                </button>
+              </div>
+
+              <div className="login-switch">
+                <span>{isRegisterMode ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?'}</span>
+                <button type="button" className="forgot" onClick={toggleRegisterMode}>
+                  {isRegisterMode ? 'Iniciar sesión' : 'Registrarse'}
                 </button>
               </div>
             </form>

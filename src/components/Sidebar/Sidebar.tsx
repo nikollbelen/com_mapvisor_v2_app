@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUiVisibility } from '../../contexts/UiVisibilityContext';
 import type { TopbarButtonId } from '../../types/auth';
-import AdminUiPanel from '../AdminUiPanel/AdminUiPanel';
 import LoginModal from '../Modals/LoginModal/LoginModal';
+import MyLotsModal from '../Modals/MyLotsModal/MyLotsModal';
 import UserInfoModal from '../Modals/UserInfoModal/UserInfoModal';
+import { fetchUserLots, type UserLotRecord } from '../../utils/userLots';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -12,14 +13,16 @@ interface SidebarProps {
 }
 
 const Sidebar = ({ onAddLot }: SidebarProps) => {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout } = useAuth();
   const { isButtonVisible } = useUiVisibility();
   const [activeItem, setActiveItem] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isUserInfoModalOpen, setIsUserInfoModalOpen] = useState(false);
-  const [isAdminUiPanelOpen, setIsAdminUiPanelOpen] = useState(false);
+  const [isMyLotsModalOpen, setIsMyLotsModalOpen] = useState(false);
+  const [pendingAddLotAfterLogin, setPendingAddLotAfterLogin] = useState(false);
+  const [myLots, setMyLots] = useState<UserLotRecord[]>([]);
   const previousUserRef = useRef(user);
 
   const navItems: {
@@ -34,7 +37,6 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
     { id: 'areas', label: 'Áreas Comunes', shortLabel: 'Áreas Comunes', icon: 'park', mobileIcon: 'pool', mobileSubtitle: 'AMENIDADES PREMIUM' },
     { id: 'lotes', label: 'Lotes', shortLabel: 'Lotes', icon: 'grid_view', mobileSubtitle: 'DISPONIBILIDAD' },
     { id: 'entorno', label: 'Entorno', shortLabel: 'Entorno', icon: 'landscape', mobileIcon: 'distance', mobileSubtitle: 'UBICACIÓN Y SERVICIOS' },
-    { id: 'video', label: 'Video', shortLabel: 'Video', icon: 'videocam', mobileIcon: 'play_circle', mobileSubtitle: 'CINEMATOGRÁFICO' },
   ];
 
   const visibleNavItems = navItems.filter(
@@ -62,6 +64,28 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
     };
   }, [isMenuOpen, isMobile]);
 
+  useEffect(() => {
+    let active = true;
+    const refreshMyLots = async () => {
+      if (!user) {
+        setMyLots([]);
+        return;
+      }
+      try {
+        const lots = await fetchUserLots();
+        if (active) setMyLots(lots);
+      } catch {
+        if (active) setMyLots([]);
+      }
+    };
+    refreshMyLots();
+    window.addEventListener("userLotsChanged", refreshMyLots);
+    return () => {
+      active = false;
+      window.removeEventListener("userLotsChanged", refreshMyLots);
+    };
+  }, [user]);
+
   // Sincronizar estado de React con eventos globales
   useEffect(() => {
     const syncActiveItemFromMapMode = (event?: Event) => {
@@ -69,16 +93,22 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
         (event as CustomEvent<{ mode?: string }> | undefined)?.detail?.mode ??
         window.mapViewerMode;
       if (isLoginModalOpen || isUserInfoModalOpen) return;
+      if (isMyLotsModalOpen) setIsMyLotsModalOpen(false);
       if (mode === "lotes") {
         setActiveItem(null);
         return;
       }
-      if (["fotos", "areas", "entorno", "video"].includes(mode ?? "")) {
+      if (["fotos", "areas", "entorno"].includes(mode ?? "")) {
         setActiveItem(mode!);
       }
     };
 
-    const handleSearchModalOpen = () => setActiveItem("lotes");
+    const handleSearchModalOpen = () => {
+      setIsLoginModalOpen(false);
+      setIsUserInfoModalOpen(false);
+      setIsMyLotsModalOpen(false);
+      setActiveItem("lotes");
+    };
 
     const handleOpenLoginModal = () => {
       setIsLoginModalOpen(true);
@@ -87,6 +117,7 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
 
     const handleReiniciarMenu = () => {
       if (isLoginModalOpen || isUserInfoModalOpen) return;
+      if (isMyLotsModalOpen) setIsMyLotsModalOpen(false);
       setActiveItem(null);
     };
 
@@ -101,22 +132,33 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
       window.removeEventListener('openLoginModal', handleOpenLoginModal);
       window.removeEventListener('reiniciarMenu', handleReiniciarMenu);
     };
-  }, [isLoginModalOpen, isUserInfoModalOpen]);
+  }, [isLoginModalOpen, isUserInfoModalOpen, isMyLotsModalOpen]);
 
   // Manejar visibilidad del modal de usuario como estado activo
   useEffect(() => {
-    if (isLoginModalOpen || isUserInfoModalOpen) {
+    if (isMyLotsModalOpen) {
+      setActiveItem('mis-lotes');
+    } else if (isLoginModalOpen || isUserInfoModalOpen) {
       setActiveItem('usuario');
-    } else if (activeItem === 'usuario') {
-      setActiveItem(null);
+    } else {
+      setActiveItem((current) =>
+        current === 'usuario' || current === 'mis-lotes' ? null : current
+      );
     }
-  }, [isLoginModalOpen, isUserInfoModalOpen]);
+  }, [isLoginModalOpen, isUserInfoModalOpen, isMyLotsModalOpen]);
 
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
 
   const handleCloseLoginModal = () => {
+    if (pendingAddLotAfterLogin) setPendingAddLotAfterLogin(false);
     setIsLoginModalOpen(false);
     setActiveItem(null);
+  };
+
+  const handleAuthenticated = () => {
+    if (!pendingAddLotAfterLogin) return;
+    setPendingAddLotAfterLogin(false);
+    onAddLot?.();
   };
 
   const handleLogout = () => {
@@ -128,6 +170,36 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
 
   const handleCloseUserInfoModal = () => {
     setIsUserInfoModalOpen(false);
+    setActiveItem(null);
+  };
+
+  const handleAddLotClick = () => {
+    if (!user) {
+      setPendingAddLotAfterLogin(true);
+      setIsLoginModalOpen(true);
+      setIsUserInfoModalOpen(false);
+      setIsMyLotsModalOpen(false);
+      setActiveItem('usuario');
+      if (isMobile) setIsMenuOpen(false);
+      return;
+    }
+    setIsUserInfoModalOpen(false);
+    setIsMyLotsModalOpen(false);
+    if (isMobile) setIsMenuOpen(false);
+    onAddLot?.();
+  };
+
+  const handleMyLotsClick = () => {
+    window.dispatchEvent(new CustomEvent("clearAllModals"));
+    setIsLoginModalOpen(false);
+    setIsUserInfoModalOpen(false);
+    setIsMyLotsModalOpen(true);
+    setActiveItem('mis-lotes');
+    if (isMobile) setIsMenuOpen(false);
+  };
+
+  const handleCloseMyLotsModal = () => {
+    setIsMyLotsModalOpen(false);
     setActiveItem(null);
   };
 
@@ -147,8 +219,10 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
         setActiveItem(null);
         setIsLoginModalOpen(false);
         setIsUserInfoModalOpen(false);
+        setIsMyLotsModalOpen(false);
       } else {
         setActiveItem('usuario');
+        setIsMyLotsModalOpen(false);
         if (user) {
           setIsUserInfoModalOpen(true);
         } else {
@@ -160,6 +234,9 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
     }
 
     const isCurrentlyActive = activeItem === itemId;
+    setIsLoginModalOpen(false);
+    setIsUserInfoModalOpen(false);
+    setIsMyLotsModalOpen(false);
 
     if (isCurrentlyActive) {
       if (window.reiniciarMenu) window.reiniciarMenu();
@@ -174,7 +251,6 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
       case 'areas': if (window.handleAreasComunes) window.handleAreasComunes(); break;
       case 'lotes': if (window.handleLotes) window.handleLotes(); break;
       case 'entorno': if (window.handleEntorno) window.handleEntorno(); break;
-      case 'video': if (window.handleVideo) window.handleVideo(); break;
     }
   };
 
@@ -198,9 +274,9 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
           <header className="fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-container-padding px-container-padding py-2 hud-glass-panel hud-glass-glow-top rounded-full max-w-fit">
             {/* Logo */}
             <div className="flex items-center gap-unit border-r border-outline-variant pr-container-padding">
-              <span className="material-symbols-outlined text-primary-container text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>domain</span>
+              <img className="topbar-brand-logo" src="/marca/icono-slogan.png" alt="Tupu - Encuentra tu lugar" />
               <div className="flex flex-col">
-                <span className="font-display text-body-md font-extrabold text-on-surface tracking-tighter leading-tight">NAUTIA CONDOMINOS</span>
+                <span className="topbar-brand-text">Tupu</span>
                 <span className="font-label-caps text-[10px] text-primary-container uppercase tracking-widest"></span>
               </div>
             </div>
@@ -210,7 +286,7 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
                 <button
                   type="button"
                   className="topbar-nav-btn topbar-nav-btn--add-lot"
-                  onClick={onAddLot}
+                  onClick={handleAddLotClick}
                   title="Agregar lote"
                 >
                   <span
@@ -220,6 +296,32 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
                     add_location_alt
                   </span>
                   <span className="font-label-caps text-[9px] uppercase">Agregar lote</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className={navBtnClass('usuario')}
+                onClick={() => handleItemClick('usuario')}
+                title={user ? "Mi cuenta" : "Iniciar sesión"}
+              >
+                <span className="material-symbols-outlined mb-1" style={navIconStyle('usuario')}>
+                  {user ? 'account_circle' : 'login'}
+                </span>
+                <span className="font-label-caps text-[9px] uppercase">
+                  {user ? 'Mi cuenta' : 'Ingresar'}
+                </span>
+              </button>
+              {user && (
+                <button
+                  type="button"
+                  className={navBtnClass('mis-lotes')}
+                  onClick={handleMyLotsClick}
+                  title="Mis lotes"
+                >
+                  <span className="material-symbols-outlined mb-1" style={navIconStyle('mis-lotes')}>
+                    real_estate_agent
+                  </span>
+                  <span className="font-label-caps text-[9px] uppercase">Mis lotes</span>
                 </button>
               )}
               {visibleNavItems.map((item) => (
@@ -238,18 +340,6 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
                   <span className="font-label-caps text-[9px] uppercase">{item.shortLabel}</span>
                 </button>
               ))}
-              {isAdmin && (
-                <button
-                  type="button"
-                  className={navBtnClass('vista')}
-                  onClick={() => setIsAdminUiPanelOpen(true)}
-                  title="Configurar botones visibles"
-                >
-                  <span className="material-symbols-outlined mb-1" style={navIconStyle('vista')}>tune</span>
-                  <span className="font-label-caps text-[9px] uppercase">Vista</span>
-                </button>
-              )}
-              {/* Separador y botón Usuario ocultos intencionalmente */}
             </nav>
           </header>
 
@@ -266,7 +356,7 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
           {/* TopNavBar (from diseñoVertical/normal/code.html) */}
           <header className="fixed top-0 w-full z-[60] flex justify-between items-center px-6 py-4 bg-surface/60 dark:bg-surface-dim/60 backdrop-blur-xl border-b border-white/20 dark:border-outline/10 shadow-sm shadow-primary/5">
               <div className="font-h3 text-h3 font-bold text-primary dark:text-primary-fixed-dim tracking-tight">
-              Nautia Condominios
+              Tupu
             </div>
             <button
               className="w-10 h-10 flex items-center justify-center rounded-xl hud-glass-panel hover:bg-white/10 transition-all duration-300"
@@ -287,7 +377,7 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
       {isMobile && isMenuOpen && (
         <div className="mobile-menu-overlay" role="dialog" aria-modal="true" aria-label="Menú principal">
           <header className="mobile-menu-header">
-            <div className="font-h3 text-primary font-extrabold tracking-tight">Nautia Condominios</div>
+            <div className="font-h3 text-primary font-extrabold tracking-tight">Tupu</div>
             <button
               type="button"
               className="mobile-menu-close"
@@ -304,10 +394,7 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
                 <button
                   type="button"
                   className="mobile-menu-item mobile-menu-item--add-lot"
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    onAddLot();
-                  }}
+                  onClick={handleAddLotClick}
                 >
                   <div className="mobile-menu-item-icon mobile-menu-item-icon--add-lot">
                     <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>
@@ -317,6 +404,42 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
                   <div className="mobile-menu-item-text">
                     <span className="mobile-menu-item-title">Agregar lote</span>
                     <span className="mobile-menu-item-subtitle">NUEVO POLÍGONO</span>
+                  </div>
+                </button>
+              )}
+              <button
+                type="button"
+                className={`mobile-menu-item mobile-menu-item--user ${activeItem === 'usuario' ? "active" : ""}`}
+                onClick={() => handleItemClick('usuario')}
+              >
+                <div className="mobile-menu-item-icon mobile-menu-item-icon--user">
+                  <span className="material-symbols-outlined">
+                    {user ? 'account_circle' : 'login'}
+                  </span>
+                </div>
+                <div className="mobile-menu-item-text">
+                  <span className="mobile-menu-item-title mobile-menu-item-title--gold">
+                    {user ? 'Mi cuenta' : 'Iniciar sesión'}
+                  </span>
+                  <span className="mobile-menu-item-subtitle">
+                    {user ? user.email : 'ACCESO DE USUARIO'}
+                  </span>
+                </div>
+              </button>
+              {user && (
+                <button
+                  type="button"
+                  className={`mobile-menu-item ${activeItem === 'mis-lotes' ? "active" : ""}`}
+                  onClick={handleMyLotsClick}
+                >
+                  <div className="mobile-menu-item-icon mobile-menu-item-icon--user">
+                    <span className="material-symbols-outlined">real_estate_agent</span>
+                  </div>
+                  <div className="mobile-menu-item-text">
+                    <span className="mobile-menu-item-title mobile-menu-item-title--gold">Mis lotes</span>
+                    <span className="mobile-menu-item-subtitle">
+                      {myLots.length === 1 ? '1 LOTE CREADO' : `${myLots.length} LOTES CREADOS`}
+                    </span>
                   </div>
                 </button>
               )}
@@ -341,24 +464,6 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
                   </div>
                 </button>
               ))}
-              {isAdmin && (
-                <button
-                  type="button"
-                  className="mobile-menu-item"
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    setIsAdminUiPanelOpen(true);
-                  }}
-                >
-                  <div className="mobile-menu-item-icon mobile-menu-item-icon--admin">
-                    <span className="material-symbols-outlined">tune</span>
-                  </div>
-                  <div className="mobile-menu-item-text">
-                    <span className="mobile-menu-item-title">Configurar vista</span>
-                    <span className="mobile-menu-item-subtitle">ADMINISTRADOR</span>
-                  </div>
-                </button>
-              )}
             </div>
           </nav>
 
@@ -366,13 +471,17 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
       )}
 
 
-      <AdminUiPanel
-        isOpen={isAdminUiPanelOpen}
-        onClose={() => setIsAdminUiPanelOpen(false)}
-      />
-
       {/* Modals */}
-      <LoginModal isVisible={isLoginModalOpen} onClose={handleCloseLoginModal} />
+      <LoginModal
+        isVisible={isLoginModalOpen}
+        onClose={handleCloseLoginModal}
+        onAuthenticated={handleAuthenticated}
+      />
+      <MyLotsModal
+        isVisible={isMyLotsModalOpen}
+        lots={myLots}
+        onClose={handleCloseMyLotsModal}
+      />
       {user && (
         <UserInfoModal
           isVisible={isUserInfoModalOpen}

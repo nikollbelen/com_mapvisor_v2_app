@@ -1,8 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useAuth } from "../../../contexts/AuthContext";
+import { saveUserLot } from "../../../utils/userLots";
 import {
-  confirmGoogleAppsScriptWrite,
-  postToGoogleAppsScript,
-} from "../../../utils/googleAppsScript";
+  MAPVISOR_API_BASE_URL,
+  getMapvisorAuthToken,
+  mapvisorApi,
+} from "../../../utils/mapvisorApi";
 import "./AddLotModal.css";
 
 interface AddLotModalProps {
@@ -21,9 +24,15 @@ interface ParsedCoord {
 
 interface FormState {
   nombre: string;
+  tipoPropiedad: string;
+  operacion: string;
   estado: string;
   precio: string;
   area: string;
+  ciudad: string;
+  distrito: string;
+  dormitorios: string;
+  banos: string;
   etapa: string;
   coordenadas: string;
   youtubeUrl: string;
@@ -79,13 +88,21 @@ function buildGeoJsonFeature(form: FormState, coords: ParsedCoord[], fid: number
     properties: {
       fid,
       number: form.nombre.trim(),
+      tipo_propiedad: form.tipoPropiedad,
+      tipoPropiedad: form.tipoPropiedad,
+      operacion: form.operacion,
       estado: form.estado,
       lote: form.nombre.trim(),
       manzana: "",
       area: form.area.trim(),
       precio: form.precio.trim(),
+      ciudad: form.ciudad.trim(),
+      distrito: form.distrito.trim(),
+      dormitorios: form.dormitorios.trim(),
+      banos: form.banos.trim(),
       etapa: form.etapa.trim(),
       media: "",
+      ownerId: "",
     },
     geometry: {
       type: "Polygon",
@@ -97,9 +114,15 @@ function buildGeoJsonFeature(form: FormState, coords: ParsedCoord[], fid: number
 // ── Componente ──────────────────────────────────────────────────────────────
 const EMPTY_FORM: FormState = {
   nombre: "",
+  tipoPropiedad: "lote",
+  operacion: "venta",
   estado: "disponible",
   precio: "",
   area: "",
+  ciudad: "",
+  distrito: "",
+  dormitorios: "",
+  banos: "",
   etapa: "",
   coordenadas: "",
   youtubeUrl: "",
@@ -167,37 +190,29 @@ async function readJsonResponse(resp: Response) {
 }
 
 async function uploadLotFile(file: File, lotId: number | string): Promise<LotMediaItem> {
-  const presignResp = await fetch("/api/r2-upload-url", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      fileName: file.name,
-      fileType: file.type,
-      lotId,
-    }),
-  });
-  const presign = await readJsonResponse(presignResp);
-  if (!presignResp.ok || !presign?.ok) {
-    if (presignResp.status === 404) {
-      throw new Error(
-        "No se encontró /api/r2-upload-url. En local usa `vercel dev` o prueba en el deploy de Vercel; Vite solo no levanta las funciones API."
-      );
+  const body = new FormData();
+  body.set("file", file);
+  body.set("lotId", String(lotId));
+  const uploadResp = await fetch(
+    `${MAPVISOR_API_BASE_URL}/api/r2-upload`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: getMapvisorAuthToken()
+        ? { Authorization: `Bearer ${getMapvisorAuthToken()}` }
+        : undefined,
+      body,
     }
-    throw new Error(presign?.error || "No se pudo preparar la subida a Cloudflare R2");
-  }
-
-  const uploadResp = await fetch(presign.uploadUrl, {
-    method: "PUT",
-    body: file,
-  });
-  if (!uploadResp.ok) {
-    throw new Error(`No se pudo subir ${file.name}`);
+  );
+  const upload = await readJsonResponse(uploadResp);
+  if (!uploadResp.ok || !upload?.ok) {
+    throw new Error(upload?.error || `No se pudo subir ${file.name}`);
   }
 
   return {
     type: file.type.startsWith("video/") ? "video" : "image",
-    url: presign.publicUrl,
-    key: presign.key,
+    url: upload.publicUrl,
+    key: upload.key,
     name: file.name,
   };
 }
@@ -209,6 +224,7 @@ const AddLotModal = ({
   initialLot,
   onSaved,
 }: AddLotModalProps) => {
+  const { user } = useAuth();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [existingMedia, setExistingMedia] = useState<LotMediaItem[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -232,11 +248,18 @@ const AddLotModal = ({
 
     const media = parseMedia(initialLot.media || initialLot.Media);
     const youtube = media.find((item) => item.type === "youtube")?.url || "";
+    const tipoPropiedad = initialLot.tipo_propiedad || initialLot.tipoPropiedad || "lote";
     setForm({
       nombre: initialLot.nombre || initialLot.direccion || "",
+      tipoPropiedad,
+      operacion: initialLot.operacion || "venta",
       estado: initialLot.estado || "disponible",
       precio: normalizeNumericInput(initialLot.precio),
       area: normalizeNumericInput(initialLot.area),
+      ciudad: initialLot.ciudad || "",
+      distrito: initialLot.distrito || "",
+      dormitorios: tipoPropiedad === "lote" ? "" : normalizeNumericInput(initialLot.dormitorios),
+      banos: tipoPropiedad === "lote" ? "" : normalizeNumericInput(initialLot.banos),
       etapa: initialLot.phase || initialLot.etapa || "",
       coordenadas: initialLot.coordenadas || "",
       youtubeUrl: youtube,
@@ -454,7 +477,13 @@ const AddLotModal = ({
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === "tipoPropiedad" && value === "lote"
+        ? { dormitorios: "", banos: "" }
+        : {}),
+    }));
     if (name === "coordenadas") setCoordError("");
     setSubmitState("idle");
   };
@@ -543,6 +572,12 @@ const AddLotModal = ({
       return;
     }
 
+    if (!form.tipoPropiedad || !form.operacion) {
+      setErrorMessage("Selecciona el tipo de propiedad y si es venta o alquiler.");
+      setSubmitState("error");
+      return;
+    }
+
     const coords = form.coordenadas.trim() ? parseCoordinates(form.coordenadas) : null;
     if (!coords && !isEditMode) {
       setCoordError(
@@ -560,7 +595,12 @@ const AddLotModal = ({
       return;
     }
 
-    const fid = isEditMode ? initialLot.id : Date.now();
+    const fid = isEditMode ? String(initialLot.id) : `lot_${Date.now()}`;
+    if (!user) {
+      setSubmitState("error");
+      setErrorMessage("Inicia sesión para agregar o editar un lote.");
+      return;
+    }
 
     setSubmitState("loading");
     let media: LotMediaItem[] = [...existingMedia];
@@ -588,94 +628,66 @@ const AddLotModal = ({
     const feature = coords ? buildGeoJsonFeature(form, coords, fid) : null;
     if (feature) {
       feature.properties.media = JSON.stringify(media);
+      feature.properties.ownerId = user.id;
     }
 
-    // 1) Añadir al mapa en tiempo real vía Cesium
+    const persistLocalUserLot = () => {
+      if (isEditMode) return;
+      saveUserLot({
+        id: String(fid),
+        ownerId: user.id,
+        nombre: form.nombre.trim(),
+        tipoPropiedad: form.tipoPropiedad,
+        operacion: form.operacion,
+        estado: form.estado,
+        precio: form.precio.trim(),
+        area: form.area.trim(),
+        ciudad: form.ciudad.trim(),
+        distrito: form.distrito.trim(),
+        dormitorios: form.dormitorios.trim(),
+        banos: form.banos.trim(),
+        etapa: form.etapa.trim(),
+        createdAt: new Date().toISOString(),
+      });
+    };
+
     try {
-      if (window.addLotToMap) {
-        if (feature) window.addLotToMap(feature);
-      }
-    } catch (mapErr) {
-      console.warn("[AddLotModal] No se pudo añadir al mapa:", mapErr);
-    }
+      const payload = {
+        id: fid,
+        nombre: form.nombre.trim(),
+        tipo_propiedad: form.tipoPropiedad,
+        operacion: form.operacion,
+        estado: form.estado,
+        precio: form.precio.trim(),
+        area: form.area.trim(),
+        ciudad: form.ciudad.trim(),
+        distrito: form.distrito.trim(),
+        dormitorios: form.tipoPropiedad === "lote" ? "" : form.dormitorios.trim(),
+        banos: form.tipoPropiedad === "lote" ? "" : form.banos.trim(),
+        etapa: form.etapa.trim(),
+        visibility: "public",
+        media,
+        coordenadas: coords
+          ? coords.map((c) => `${c.lng},${c.lat}`).join("|")
+          : initialLot?.coordenadas || "",
+      };
 
-    // 2) Enviar a Google Apps Script (Sheet)
-    const scriptUrl = import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL;
-    if (scriptUrl) {
+      await mapvisorApi(isEditMode ? `/api/lots/${fid}` : "/api/lots", {
+        method: isEditMode ? "PUT" : "POST",
+        json: payload,
+      });
+
       try {
-        const payload = {
-          action: isEditMode ? "updateLot" : "addLot",
-          fid,
-          nombre: form.nombre.trim(),
-          estado: form.estado,
-          precio: form.precio.trim(),
-          area: form.area.trim(),
-          etapa: form.etapa.trim(),
-          media: JSON.stringify(media),
-          ...(coords
-            ? { coordenadas: coords.map((c) => `${c.lng},${c.lat}`).join("|") }
-            : {}),
-        };
-
-        const resp = await postToGoogleAppsScript(scriptUrl, payload);
-
-        if (!resp.ok) {
-          const writeWasPersisted = await confirmGoogleAppsScriptWrite(
-            scriptUrl,
-            payload
-          );
-          if (!writeWasPersisted) {
-            throw new Error(`Error HTTP ${resp.status}`);
-          }
-          console.warn(
-            "[AddLotModal] Apps Script devolvió HTTP",
-            resp.status,
-            "pero el lote fue confirmado en Google Sheets."
-          );
+        if (window.addLotToMap) {
+          if (feature) window.addLotToMap(feature);
         }
-
-        let result: { ok?: boolean; error?: string } = {};
-        try {
-          result = await resp.json();
-        } catch {
-          /* respuesta vacía tras redirect de GAS */
-        }
-        if (result.ok === false) {
-          const writeWasPersisted = await confirmGoogleAppsScriptWrite(
-            scriptUrl,
-            payload
-          );
-          if (!writeWasPersisted) {
-            throw new Error(result.error || "Error al guardar en Sheets");
-          }
-          console.warn(
-            "[AddLotModal] Apps Script reportó error, pero el lote fue confirmado en Google Sheets:",
-            result.error
-          );
-        }
-
-        setSubmitState("success");
-        onSaved?.();
-        // Limpiar el formulario después del éxito
-        setTimeout(() => {
-          setForm(EMPTY_FORM);
-          setExistingMedia([]);
-          setSelectedFiles([]);
-          setMediaError("");
-          setSubmitState("idle");
-          onClose();
-        }, 1500);
-      } catch (err) {
-        console.error("[AddLotModal] Error al guardar en Sheets:", err);
-        // El lote ya fue añadido al mapa; avisar que el Sheet falló
-        setSubmitState("error");
-        setErrorMessage(
-          "No se pudo guardar en Google Sheets. Verifica que el Apps Script actualizado esté desplegado."
-        );
+      } catch (mapErr) {
+        console.warn("[AddLotModal] No se pudo añadir al mapa:", mapErr);
       }
-    } else {
-      // Sin URL de Script, solo agregar al mapa y cerrar
+
       setSubmitState("success");
+      persistLocalUserLot();
+      onSaved?.();
       setTimeout(() => {
         setForm(EMPTY_FORM);
         setExistingMedia([]);
@@ -684,6 +696,14 @@ const AddLotModal = ({
         setSubmitState("idle");
         onClose();
       }, 1000);
+    } catch (err) {
+      console.error("[AddLotModal] Error al guardar en Cloudflare:", err);
+      setSubmitState("error");
+      setErrorMessage(
+        err instanceof Error
+          ? err.message
+          : "No se pudo guardar el lote en Cloudflare."
+      );
     }
   };
 
@@ -800,6 +820,43 @@ const AddLotModal = ({
                 />
               </div>
 
+              {/* Tipo de propiedad */}
+              <div className="add-lot-field">
+                <label className="add-lot-label" htmlFor="al-tipo-propiedad">
+                  Tipo de propiedad *
+                </label>
+                <select
+                  id="al-tipo-propiedad"
+                  name="tipoPropiedad"
+                  className="add-lot-select"
+                  value={form.tipoPropiedad}
+                  onChange={handleChange}
+                  disabled={isLoading}
+                >
+                  <option value="lote">Lote</option>
+                  <option value="casa">Casa</option>
+                  <option value="departamento">Departamento</option>
+                </select>
+              </div>
+
+              {/* Operación */}
+              <div className="add-lot-field">
+                <label className="add-lot-label" htmlFor="al-operacion">
+                  Operación *
+                </label>
+                <select
+                  id="al-operacion"
+                  name="operacion"
+                  className="add-lot-select"
+                  value={form.operacion}
+                  onChange={handleChange}
+                  disabled={isLoading}
+                >
+                  <option value="venta">Venta</option>
+                  <option value="alquiler">Alquiler</option>
+                </select>
+              </div>
+
               {/* Estado */}
               <div className="add-lot-field">
                 <label className="add-lot-label" htmlFor="al-estado">
@@ -832,6 +889,42 @@ const AddLotModal = ({
                   className="add-lot-input"
                   placeholder='Ej: Etapa I, Terminado…'
                   value={form.etapa}
+                  onChange={handleChange}
+                  disabled={isLoading}
+                  autoComplete="off"
+                />
+              </div>
+
+              {/* Ciudad */}
+              <div className="add-lot-field">
+                <label className="add-lot-label" htmlFor="al-ciudad">
+                  Ciudad
+                </label>
+                <input
+                  id="al-ciudad"
+                  name="ciudad"
+                  type="text"
+                  className="add-lot-input"
+                  placeholder="Ej: Arequipa"
+                  value={form.ciudad}
+                  onChange={handleChange}
+                  disabled={isLoading}
+                  autoComplete="off"
+                />
+              </div>
+
+              {/* Distrito */}
+              <div className="add-lot-field">
+                <label className="add-lot-label" htmlFor="al-distrito">
+                  Distrito
+                </label>
+                <input
+                  id="al-distrito"
+                  name="distrito"
+                  type="text"
+                  className="add-lot-input"
+                  placeholder="Ej: Mejía"
+                  value={form.distrito}
                   onChange={handleChange}
                   disabled={isLoading}
                   autoComplete="off"
@@ -874,6 +967,46 @@ const AddLotModal = ({
                   value={form.area}
                   onChange={handleChange}
                   disabled={isLoading}
+                  autoComplete="off"
+                />
+              </div>
+
+              {/* Dormitorios */}
+              <div className="add-lot-field">
+                <label className="add-lot-label" htmlFor="al-dormitorios">
+                  Dormitorios
+                </label>
+                <input
+                  id="al-dormitorios"
+                  name="dormitorios"
+                  type="number"
+                  min="0"
+                  step="1"
+                  className="add-lot-input"
+                  placeholder={form.tipoPropiedad === "lote" ? "No aplica" : "3"}
+                  value={form.dormitorios}
+                  onChange={handleChange}
+                  disabled={isLoading || form.tipoPropiedad === "lote"}
+                  autoComplete="off"
+                />
+              </div>
+
+              {/* Baños */}
+              <div className="add-lot-field">
+                <label className="add-lot-label" htmlFor="al-banos">
+                  Baños
+                </label>
+                <input
+                  id="al-banos"
+                  name="banos"
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  className="add-lot-input"
+                  placeholder={form.tipoPropiedad === "lote" ? "No aplica" : "2"}
+                  value={form.banos}
+                  onChange={handleChange}
+                  disabled={isLoading || form.tipoPropiedad === "lote"}
                   autoComplete="off"
                 />
               </div>

@@ -4,13 +4,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MVP Nautia Condominios</title>
-  <meta name="description" content="Nautia Condominios - Condominio Residencial Playa">
+  <title>Tupu - Encuentra tu lugar</title>
+  <meta name="description" content="Tupu - Encuentra tu lugar. Plataforma para publicar lotes y propiedades en un mapa interactivo.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=Manrope:wght@400;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
-  <link rel="icon" href="/images/init/init-icon.png">
+  <link rel="icon" type="image/png" href="/marca/icono.png?v=tupu-1">
+  <link rel="shortcut icon" type="image/png" href="/marca/icono.png?v=tupu-1">
+  <link rel="apple-touch-icon" href="/marca/icono.png?v=tupu-1">
 
   <!-- Cesium CSS -->
     <script src="https://cesium.com/downloads/cesiumjs/releases/1.134/Build/Cesium/Cesium.js"></script>
@@ -28,8 +30,8 @@
         extend: {
           colors: {
             "surface-container": "#1e2020",
-            "primary-container": "#c5a059",
-            "on-primary": "#412d00",
+            "primary-container": "#2962FF",
+            "on-primary": "#FFFFFF",
             "on-primary-fixed-variant": "#5d4201",
             "on-secondary-fixed-variant": "#39485e",
             "on-tertiary-fixed-variant": "#39475f",
@@ -43,17 +45,17 @@
             "secondary": "#b8c7e2",
             "on-secondary-container": "#aab9d4",
             "secondary-fixed-dim": "#b8c7e2",
-            "outline": "#9a8f80",
+            "outline": "#64748B",
             "surface-container-lowest": "#0c0f0f",
             "secondary-container": "#3b4a60",
             "error": "#ffb4ab",
             "on-background": "#e2e2e2",
             "surface-bright": "#37393a",
             "on-surface-variant": "#d1c5b4",
-            "primary": "#e9c176",
-            "inverse-primary": "#775a19",
+            "primary": "#2962FF",
+            "inverse-primary": "#8B5CF6",
             "tertiary-fixed-dim": "#b9c7e4",
-            "surface-tint": "#e9c176",
+            "surface-tint": "#2962FF",
             "on-tertiary-container": "#2e3c53",
             "surface-dim": "#121414",
             "primary-fixed": "#ffdea5",
@@ -66,8 +68,8 @@
             "surface-container-high": "#282a2b",
             "on-tertiary": "#233148",
             "on-secondary-fixed": "#0c1c30",
-            "on-primary-container": "#4e3700",
-            "primary-fixed-dim": "#e9c176",
+            "on-primary-container": "#FFFFFF",
+            "primary-fixed-dim": "#8B5CF6",
             "outline-variant": "#4e4639",
             "inverse-surface": "#e2e2e2",
             "tertiary": "#b9c7e4",
@@ -108,28 +110,28 @@
       background: rgba(30, 32, 32, 0.85);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(197, 160, 89, 0.2);
+      border: 1px solid rgba(41, 98, 255, 0.24);
       box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
     }
     .hud-glass-glow-top {
-      border-top: 1px solid rgba(197, 160, 89, 0.3);
-      border-left: 1px solid rgba(197, 160, 89, 0.3);
+      border-top: 1px solid rgba(139, 92, 246, 0.34);
+      border-left: 1px solid rgba(41, 98, 255, 0.34);
     }
     .hud-gold-edge {
-      border-top: 1px solid rgba(197, 160, 89, 0.4);
-      border-left: 1px solid rgba(197, 160, 89, 0.4);
+      border-top: 1px solid rgba(139, 92, 246, 0.42);
+      border-left: 1px solid rgba(41, 98, 255, 0.42);
     }
     .hud-gold-gradient {
-      background: linear-gradient(135deg, #e9c176 0%, #c5a059 100%);
+      background: linear-gradient(135deg, #2962FF 0%, #8B5CF6 100%);
     }
     .hud-gold-gradient-bg {
-      background: linear-gradient(135deg, #e9c176 0%, #c5a059 100%);
+      background: linear-gradient(135deg, #2962FF 0%, #8B5CF6 100%);
     }
     .hud-gold-border {
-      border: 1px solid rgba(197, 160, 89, 0.3);
+      border: 1px solid rgba(41, 98, 255, 0.3);
     }
     .hud-gold-glow {
-      box-shadow: 0 0 20px rgba(233, 193, 118, 0.3);
+      box-shadow: 0 0 20px rgba(41, 98, 255, 0.3);
     }
     .hud-status-dot {
       width: 10px;
@@ -140,9 +142,9 @@
     
     /* Active state for camera grid button */
     #grid.active {
-      background-color: #c5a059 !important;
-      color: #412d00 !important;
-      box-shadow: 0 0 15px rgba(197, 160, 89, 0.5);
+      background-color: #2962FF !important;
+      color: #FFFFFF !important;
+      box-shadow: 0 0 15px rgba(41, 98, 255, 0.5);
     }
 
     /* Móvil: paneles glass más opacos (legibilidad sin perder blur) */

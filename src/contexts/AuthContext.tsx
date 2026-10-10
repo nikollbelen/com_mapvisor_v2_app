@@ -7,8 +7,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { DEMO_USERS } from "../config/users";
-import type { AppUser, UserRole } from "../types/auth";
+import type { AppUser } from "../types/auth";
+import { mapvisorApi, setMapvisorAuthToken } from "../utils/mapvisorApi";
 
 const SESSION_KEY = "mapvisor_auth_session";
 
@@ -16,41 +16,43 @@ interface AuthContextType {
   user: AppUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  role: UserRole | null;
-  isAdmin: boolean;
-  isVendedor: boolean;
-  canUseCotizador: boolean;
   login: (email: string, password: string) => Promise<boolean>;
+  register: (fullName: string, email: string, password: string) => Promise<{
+    ok: boolean;
+    error?: string;
+  }>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-const normalizeEmail = (email: string) => email.trim().toLowerCase();
-
-const toAppUser = (record: (typeof DEMO_USERS)[number]): AppUser => ({
-  id: record.id,
-  email: record.email,
-  full_name: record.full_name,
-  role: record.role,
-});
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(SESSION_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as AppUser;
-      const exists = DEMO_USERS.some((u) => u.id === parsed.id);
-      if (exists) setUser(parsed);
-    } catch {
-      sessionStorage.removeItem(SESSION_KEY);
-    } finally {
-      setIsLoading(false);
-    }
+    let active = true;
+    mapvisorApi<{ ok: boolean; user: AppUser | null }>("/api/auth/me")
+      .then((result) => {
+        if (!active) return;
+        setUser(result.user);
+        if (result.user) {
+          sessionStorage.setItem(SESSION_KEY, JSON.stringify(result.user));
+        } else {
+          sessionStorage.removeItem(SESSION_KEY);
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        sessionStorage.removeItem(SESSION_KEY);
+        setUser(null);
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const persistUser = useCallback((nextUser: AppUser | null) => {
@@ -63,34 +65,56 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
-    const normalized = normalizeEmail(email);
-    const match = DEMO_USERS.find(
-      (u) => normalizeEmail(u.email) === normalized && u.password === password
-    );
-    if (!match) return false;
-    persistUser(toAppUser(match));
-    return true;
+    try {
+      const result = await mapvisorApi<{ ok: boolean; token: string; user: AppUser }>("/api/auth/login", {
+        method: "POST",
+        json: { email, password },
+      });
+      setMapvisorAuthToken(result.token);
+      persistUser(result.user);
+      return true;
+    } catch {
+      return false;
+    }
   }, [persistUser]);
 
-  const logout = useCallback(() => {
+  const register = useCallback(async (fullName: string, email: string, password: string) => {
+    try {
+      const result = await mapvisorApi<{ ok: boolean; token: string; user: AppUser }>("/api/auth/register", {
+        method: "POST",
+        json: { full_name: fullName, email, password },
+      });
+      setMapvisorAuthToken(result.token);
+      persistUser(result.user);
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "No se pudo crear la cuenta.",
+      };
+    }
+  }, [persistUser]);
+
+  const logout = useCallback(async () => {
+    try {
+      await mapvisorApi("/api/auth/logout", { method: "POST" });
+    } catch {
+      /* limpiar sesión local aunque falle la red */
+    }
+    setMapvisorAuthToken(null);
     persistUser(null);
   }, [persistUser]);
-
-  const role = user?.role ?? null;
 
   const value = useMemo<AuthContextType>(
     () => ({
       user,
       isAuthenticated: !!user,
       isLoading,
-      role,
-      isAdmin: role === "admin",
-      isVendedor: role === "vendedor",
-      canUseCotizador: role === "vendedor" || role === "admin",
       login,
+      register,
       logout,
     }),
-    [user, isLoading, role, login, logout]
+    [user, isLoading, login, register, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -65,7 +65,7 @@ const TimeOfDayControl = ({ isVisible = false }: TimeOfDayControlProps) => {
   return (
     <div className={`time-of-day-control hud-glass-panel hud-glass-glow-top ${isMobile ? 'mobile' : ''}`}>
       <div className="time-of-day-header">
-        <span className="material-symbols-outlined" style={{ color: '#e9c176', fontVariationSettings: "'FILL' 1" }}>wb_sunny</span>
+        <span className="material-symbols-outlined" style={{ color: '#8B5CF6', fontVariationSettings: "'FILL' 1" }}>wb_sunny</span>
         <span className="time-of-day-title">Hora del Día</span>
         <button
           className="time-of-day-close-btn"

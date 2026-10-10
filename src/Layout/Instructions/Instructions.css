@@ -15,7 +15,10 @@
   align-items: center;
   opacity: 1;
   transition: opacity 0.5s ease-out;
-  background-color: rgba(14, 14, 14, 0.85); /* Slightly darker for better contrast with the new design */
+  background:
+    radial-gradient(circle at 18% 8%, rgba(41, 98, 255, 0.22), transparent 32%),
+    radial-gradient(circle at 82% 72%, rgba(139, 92, 246, 0.18), transparent 30%),
+    rgba(11, 18, 48, 0.84);
   backdrop-filter: blur(10px);
 }
 
@@ -28,35 +31,90 @@
 .instructions-glass-panel {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(197, 160, 89, 0.3);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-  animation: instructionsFadeInUp 0.6s ease-out forwards;
+  border: 1px solid rgba(41, 98, 255, 0.3);
+  box-shadow: 0 24px 60px rgba(11, 18, 48, 0.48), 0 0 40px rgba(41, 98, 255, 0.10);
+  animation: instructionsFadeInUp 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.instructions-main-overlay .instructions-glass-panel {
+  max-width: 860px;
+}
+
+.instructions-main-overlay h1 {
+  font-size: clamp(2rem, 4vw, 3rem) !important;
+  line-height: 1.05 !important;
+  letter-spacing: 0 !important;
+}
+
+.instructions-main-overlay header {
+  margin-bottom: 28px !important;
+}
+
+.instructions-main-overlay header p {
+  max-width: 560px;
+  margin: 0 auto;
+  font-size: 0.98rem !important;
+  line-height: 1.55 !important;
 }
 
 .instructions-inner-glow {
-  box-shadow: inset 1px 1px 0px rgba(197, 160, 89, 0.3);
+  box-shadow: inset 1px 1px 0px rgba(41, 98, 255, 0.3);
 }
 
 .instructions-gold-glow {
-  box-shadow: 0 0 15px rgba(233, 193, 118, 0.4);
+  box-shadow: 0 12px 28px rgba(41, 98, 255, 0.32);
 }
 
 .instructions-gradient-gold {
-  background: linear-gradient(135deg, #e9c176 0%, #c5a059 100%);
+  background: linear-gradient(135deg, #2962ff 0%, #8b5cf6 100%);
 }
 
 .instructions-gold-gradient-bg {
-  background: linear-gradient(135deg, #e9c176 0%, #c5a059 100%);
+  background: linear-gradient(135deg, #2962ff 0%, #8b5cf6 100%);
 }
 
 .instructions-card {
   opacity: 0;
-  animation: instructionsFadeInUp 0.5s ease-out forwards;
+  animation: instructionsFadeInUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease;
+  padding: 22px 18px !important;
+}
+
+.instructions-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(41, 98, 255, 0.36);
 }
 
 .instructions-card:nth-child(1) { animation-delay: 0.2s; }
 .instructions-card:nth-child(2) { animation-delay: 0.3s; }
 .instructions-card:nth-child(3) { animation-delay: 0.4s; }
+
+.instructions-card > div:first-child,
+.instructions-mobile-gesture-card > div:first-child {
+  width: 72px !important;
+  height: 72px !important;
+  margin-bottom: 18px !important;
+  border-radius: 20px !important;
+  background: linear-gradient(135deg, rgba(41, 98, 255, 0.2), rgba(139, 92, 246, 0.16)) !important;
+  border: 1px solid rgba(41, 98, 255, 0.28);
+}
+
+.instructions-card .material-symbols-outlined {
+  font-size: 38px !important;
+  color: #8b5cf6 !important;
+  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 40 !important;
+}
+
+.instructions-card h3 {
+  font-size: 1.05rem !important;
+  line-height: 1.25 !important;
+  margin-bottom: 8px !important;
+}
+
+.instructions-card p {
+  font-size: 0.9rem !important;
+  line-height: 1.45 !important;
+}
 
 @keyframes instructionsFadeInUp {
   from {
@@ -108,6 +166,19 @@
   gap: 8px;
 }
 
+.instructions-mobile-panel {
+  max-width: min(430px, 100%) !important;
+}
+
+.instructions-mobile-header h1 {
+  font-size: clamp(1.75rem, 8vw, 2.35rem) !important;
+}
+
+.instructions-mobile-header p {
+  font-size: 0.92rem !important;
+  line-height: 1.45 !important;
+}
+
 .instructions-mobile-gestures {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -116,6 +187,30 @@
 
 .instructions-mobile-gesture-card {
   min-width: 0;
+  padding: 14px 10px !important;
+  gap: 10px !important;
+}
+
+.instructions-mobile-gesture-card > div:first-child {
+  width: 58px !important;
+  height: 58px !important;
+  margin-bottom: 0 !important;
+}
+
+.instructions-mobile-gesture-card .material-symbols-outlined {
+  font-size: 34px !important;
+  color: #8b5cf6 !important;
+  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 36 !important;
+}
+
+.instructions-mobile-gesture-card p:first-child {
+  font-size: 0.68rem !important;
+  line-height: 1.15 !important;
+}
+
+.instructions-mobile-gesture-card p:last-child {
+  font-size: 0.95rem !important;
+  line-height: 1.2 !important;
 }
 
 .instructions-mobile-gesture-card p {
@@ -131,13 +226,15 @@
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
-    background-color: rgba(0, 0, 0, 0.62);
+    background:
+      radial-gradient(circle at 18% 8%, rgba(41, 98, 255, 0.22), transparent 32%),
+      rgba(11, 18, 48, 0.68);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
   }
 
   .instructions-mobile-panel {
-    background: rgba(14, 16, 16, 0.96) !important;
+    background: rgba(11, 18, 48, 0.96) !important;
   }
 }
 

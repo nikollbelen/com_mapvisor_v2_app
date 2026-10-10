@@ -109,6 +109,119 @@
   margin-bottom: 14px;
 }
 
+.filter-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.filter-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.search-input-shell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  transition: all 0.25s ease;
+}
+
+.search-input-shell:focus-within {
+  border-color: rgba(233, 193, 118, 0.42);
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.search-input-shell .material-symbols-outlined {
+  color: #9a8f80;
+  font-size: 19px;
+  flex-shrink: 0;
+}
+
+.lot-search-input {
+  width: 100%;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e2e2;
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+  outline: none;
+  padding: 0 12px;
+  transition: all 0.25s ease;
+  min-width: 0;
+}
+
+.search-input-shell .lot-search-input {
+  height: 42px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.lot-search-input::placeholder {
+  color: rgba(154, 143, 128, 0.76);
+}
+
+.lot-search-input:focus {
+  border-color: rgba(233, 193, 118, 0.42);
+  background: rgba(255, 255, 255, 0.075);
+}
+
+select.lot-search-input {
+  cursor: pointer;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #9a8f80 50%),
+    linear-gradient(135deg, #9a8f80 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) 18px,
+    calc(100% - 11px) 18px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 26px;
+}
+
+.compact-pill-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.compact-pill {
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: #a99d8b;
+  font-family: 'Manrope', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.22s ease;
+  flex: 1 1 auto;
+}
+
+.compact-pill:hover {
+  border-color: rgba(233, 193, 118, 0.35);
+  color: #e2e2e2;
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.compact-pill.active {
+  color: #121414;
+  border-color: rgba(233, 193, 118, 0.78);
+  background: linear-gradient(135deg, #e9c176 0%, #c5a059 100%);
+  box-shadow: 0 8px 18px rgba(197, 160, 89, 0.16);
+}
+
 /* ---- Range sliders ---- */
 .range-slider-container { padding: 20px 8px 4px; }
 
@@ -415,6 +528,15 @@
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
+
+  .filter-grid,
+  .filter-grid.three {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .filter-grid.three .filter-section:last-child {
+    grid-column: 1 / -1;
+  }
 }
 
 /* ---- Status pills ---- */
@@ -543,4 +665,116 @@
   color: #9a8f80;
   padding-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ---- Tupu UX polish overrides ---- */
+.lot-search-modal {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(41, 98, 255, 0.16), transparent 28%),
+    radial-gradient(circle at 100% 18%, rgba(139, 92, 246, 0.13), transparent 28%),
+    rgba(15, 23, 42, 0.94) !important;
+  border-top-color: rgba(139, 92, 246, 0.36) !important;
+  border-left-color: rgba(41, 98, 255, 0.24) !important;
+  box-shadow: 0 24px 54px rgba(11, 18, 48, 0.68), 0 0 36px rgba(41, 98, 255, 0.09) !important;
+}
+
+.lot-search-title-text,
+.lot-search-title span.font-h3 {
+  font-size: 18px !important;
+}
+
+.lot-search-close-btn,
+.filter-label,
+.search-input-shell .material-symbols-outlined,
+.custom-dropdown-arrow,
+.custom-dropdown-item,
+.lot-card-label,
+.results-count,
+.clear-filters-btn {
+  color: #94a3b8 !important;
+}
+
+.lot-search-close-btn:hover,
+.range-slider .output,
+.custom-dropdown-trigger.open .custom-dropdown-arrow,
+.custom-dropdown-item.selected,
+.check-icon,
+.lot-card-value,
+.clear-filters-btn:hover {
+  color: #8b5cf6 !important;
+}
+
+.lot-search-header {
+  border-bottom-color: rgba(41, 98, 255, 0.16) !important;
+}
+
+.lot-search-content::-webkit-scrollbar-thumb {
+  background: rgba(41, 98, 255, 0.42) !important;
+}
+
+.search-input-shell:focus-within,
+.lot-search-input:focus,
+.custom-dropdown-trigger:hover,
+.custom-dropdown-trigger.open {
+  border-color: rgba(41, 98, 255, 0.44) !important;
+  box-shadow: 0 0 0 3px rgba(41, 98, 255, 0.12);
+}
+
+select.lot-search-input {
+  background-image:
+    linear-gradient(45deg, transparent 50%, #94a3b8 50%),
+    linear-gradient(135deg, #94a3b8 50%, transparent 50%) !important;
+}
+
+.compact-pill {
+  color: #94a3b8 !important;
+}
+
+.compact-pill:hover {
+  border-color: rgba(41, 98, 255, 0.36) !important;
+}
+
+.compact-pill.active,
+.lot-card-view-more-btn {
+  color: #fff !important;
+  border-color: rgba(41, 98, 255, 0.72) !important;
+  background: linear-gradient(135deg, #2962ff 0%, #8b5cf6 100%) !important;
+  box-shadow: 0 8px 18px rgba(41, 98, 255, 0.2) !important;
+}
+
+.range-slider .incl-range {
+  background: linear-gradient(90deg, #2962ff, #8b5cf6) !important;
+  box-shadow: 0 0 8px rgba(41, 98, 255, 0.5) !important;
+}
+
+.range-slider input[type="range"]::-webkit-slider-thumb {
+  background: #2962ff !important;
+  border-color: #0b1230 !important;
+  box-shadow: 0 0 8px rgba(41, 98, 255, 0.5) !important;
+}
+
+.custom-dropdown-menu {
+  background: rgba(15, 23, 42, 0.98) !important;
+  border-color: rgba(41, 98, 255, 0.3) !important;
+}
+
+.custom-dropdown-item.selected {
+  background: rgba(41, 98, 255, 0.08) !important;
+}
+
+.lot-card:hover {
+  border-color: rgba(41, 98, 255, 0.28) !important;
+}
+
+.clear-filters-btn:hover {
+  background: rgba(41, 98, 255, 0.1) !important;
+  border-color: rgba(41, 98, 255, 0.35) !important;
+}
+
+@media (max-width: 1024px) {
+  .lot-search-modal {
+    background:
+      radial-gradient(circle at 18% 0%, rgba(41, 98, 255, 0.16), transparent 28%),
+      rgba(11, 18, 48, 0.96) !important;
+  }
 }

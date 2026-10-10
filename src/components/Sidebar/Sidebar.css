@@ -11,57 +11,69 @@
   background: transparent;
   color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .topbar-nav-btn:hover {
-  color: #e9c176;
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(197, 160, 89, 0.2);
+  color: #8b5cf6;
+  background: rgba(41, 98, 255, 0.1);
+  border-color: rgba(41, 98, 255, 0.24);
+  transform: translateY(-2px);
 }
 
 .topbar-nav-btn--active {
-  color: #412d00;
-  background: linear-gradient(135deg, #e9c176 0%, #c5a059 100%);
-  border-color: rgba(233, 193, 118, 0.6);
-  box-shadow: 0 0 20px rgba(197, 160, 89, 0.35);
+  color: #ffffff;
+  background: linear-gradient(135deg, #2962ff 0%, #8b5cf6 100%);
+  border-color: rgba(41, 98, 255, 0.6);
+  box-shadow: 0 16px 30px rgba(41, 98, 255, 0.28);
   transform: scale(1.05);
 }
 
 .topbar-nav-btn--active .font-label-caps {
-  color: #412d00;
+  color: #ffffff;
   font-weight: 800;
 }
 
 .topbar-nav-btn--active .material-symbols-outlined {
-  color: #412d00;
+  color: #ffffff;
 }
 
 .topbar-nav-btn--active:hover,
 .topbar-nav-btn--active:hover .font-label-caps,
 .topbar-nav-btn--active:hover .material-symbols-outlined {
-  color: #e9c176;
+  color: #ffffff;
 }
 
 .topbar-nav-btn--add-lot {
-  color: #e9c176;
-  border-color: rgba(197, 160, 89, 0.25);
-  background: rgba(233, 193, 118, 0.08);
+  color: #2962ff;
+  border-color: rgba(41, 98, 255, 0.25);
+  background: rgba(41, 98, 255, 0.08);
 }
 
 .topbar-nav-btn--add-lot:hover {
-  background: rgba(233, 193, 118, 0.14);
-  border-color: rgba(197, 160, 89, 0.45);
-  color: #f5d9a0;
+  background: rgba(41, 98, 255, 0.14);
+  border-color: rgba(41, 98, 255, 0.45);
+  color: #8b5cf6;
+}
+
+.topbar-brand-logo {
+  width: 128px;
+  max-height: 40px;
+  object-fit: contain;
+  filter: brightness(0) invert(1) drop-shadow(0 10px 18px rgba(41, 98, 255, 0.22));
+}
+
+.topbar-brand-text {
+  display: none;
 }
 
 .mobile-menu-item--add-lot {
-  border-color: rgba(197, 160, 89, 0.35);
-  background: rgba(233, 193, 118, 0.06);
+  border-color: rgba(41, 98, 255, 0.35);
+  background: rgba(41, 98, 255, 0.06);
 }
 
 .mobile-menu-item-icon--add-lot {
-  color: #e9c176;
+  color: #2962ff;
 }
 
 /* Menú móvil — altura de pantalla + scroll interno */
@@ -75,7 +87,10 @@
   height: 100dvh;
   max-height: 100dvh;
   overflow: hidden;
-  background: rgba(12, 15, 15, 0.92);
+  background:
+    radial-gradient(circle at 20% 0%, rgba(41, 98, 255, 0.26), transparent 32%),
+    radial-gradient(circle at 88% 72%, rgba(139, 92, 246, 0.22), transparent 30%),
+    rgba(11, 18, 48, 0.94);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
 }
@@ -87,7 +102,7 @@
   justify-content: space-between;
   padding: 12px 20px;
   padding-top: max(12px, env(safe-area-inset-top));
-  border-bottom: 1px solid rgba(197, 160, 89, 0.15);
+  border-bottom: 1px solid rgba(41, 98, 255, 0.18);
 }
 
 .mobile-menu-close {
@@ -97,8 +112,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  border: 1px solid rgba(197, 160, 89, 0.3);
-  background: rgba(40, 42, 43, 0.8);
+  border: 1px solid rgba(41, 98, 255, 0.3);
+  background: rgba(15, 23, 42, 0.8);
   cursor: pointer;
   transition: transform 0.2s ease;
 }
@@ -139,27 +154,27 @@
 
 .mobile-menu-item:hover {
   background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(197, 160, 89, 0.25);
+  border-color: rgba(41, 98, 255, 0.25);
 }
 
 .mobile-menu-item.active {
-  background: linear-gradient(135deg, rgba(233, 193, 118, 0.25) 0%, rgba(197, 160, 89, 0.12) 100%);
-  border-color: rgba(233, 193, 118, 0.55);
-  box-shadow: 0 0 16px rgba(197, 160, 89, 0.2);
+  background: linear-gradient(135deg, rgba(41, 98, 255, 0.28) 0%, rgba(139, 92, 246, 0.16) 100%);
+  border-color: rgba(41, 98, 255, 0.55);
+  box-shadow: 0 0 18px rgba(41, 98, 255, 0.22);
 }
 
 .mobile-menu-item.active .mobile-menu-item-title {
-  color: #e9c176;
+  color: #8b5cf6;
 }
 
 .mobile-menu-item.active .mobile-menu-item-icon {
-  background: rgba(233, 193, 118, 0.2);
-  color: #e9c176;
+  background: rgba(41, 98, 255, 0.2);
+  color: #8b5cf6;
 }
 
 .mobile-menu-item--user {
-  background: rgba(197, 160, 89, 0.1);
-  border-color: rgba(197, 160, 89, 0.25);
+  background: rgba(41, 98, 255, 0.1);
+  border-color: rgba(41, 98, 255, 0.25);
 }
 
 .mobile-menu-item-icon {
@@ -179,13 +194,13 @@
 }
 
 .mobile-menu-item-icon--admin {
-  background: rgba(233, 193, 118, 0.12);
-  color: #e9c176;
+  background: rgba(41, 98, 255, 0.12);
+  color: #2962ff;
 }
 
 .mobile-menu-item-icon--user {
-  background: linear-gradient(135deg, #e9c176 0%, #c5a059 100%);
-  color: #412d00;
+  background: linear-gradient(135deg, #2962ff 0%, #8b5cf6 100%);
+  color: #ffffff;
 }
 
 .mobile-menu-item-text {
@@ -204,7 +219,7 @@
 }
 
 .mobile-menu-item-title--gold {
-  color: #e9c176;
+  color: #8b5cf6;
 }
 
 .mobile-menu-item-subtitle {
@@ -220,7 +235,7 @@
   flex-shrink: 0;
   padding: 12px 20px;
   padding-bottom: max(16px, env(safe-area-inset-bottom));
-  border-top: 1px solid rgba(197, 160, 89, 0.12);
+  border-top: 1px solid rgba(41, 98, 255, 0.12);
 }
 
 .mobile-menu-brochure {
@@ -232,8 +247,8 @@
   padding: 14px 20px;
   border: none;
   border-radius: 16px;
-  background: linear-gradient(135deg, #e9c176 0%, #c5a059 100%);
-  color: #412d00;
+  background: linear-gradient(135deg, #2962ff 0%, #8b5cf6 100%);
+  color: #ffffff;
   font-family: "Plus Jakarta Sans", sans-serif;
   font-size: 15px;
   font-weight: 700;

@@ -276,7 +276,7 @@ const ContactModal = ({
             {currentUser && (
               <div>
                 <p className="form-section-title">
-                  <i className="fas fa-user-tie" style={{ fontSize: "0.7rem", color: "#e9c176" }} />
+                  <i className="fas fa-user-tie" aria-hidden="true" />
                   Vendedor
                 </p>
                 <div className="contact-seller-badge">
@@ -292,7 +292,7 @@ const ContactModal = ({
             {/* ── Datos del cliente ── */}
             <div>
               <p className="form-section-title">
-                <i className="fas fa-user" style={{ fontSize: "0.7rem", color: "#e9c176" }} />
+                <i className="fas fa-user" aria-hidden="true" />
                 Datos del cliente
               </p>
 
@@ -425,7 +425,7 @@ const ContactModal = ({
             {(type === "print" || type === "save") && (
               <div>
                 <p className="form-section-title">
-                  <i className="fas fa-calendar-alt" style={{ fontSize: "0.7rem", color: "#e9c176" }} />
+                  <i className="fas fa-calendar-alt" aria-hidden="true" />
                   Vigencia de la cotización
                 </p>
                 <div className="cm-grid">
@@ -463,7 +463,7 @@ const ContactModal = ({
             {type === "save" && (
               <div>
                 <p className="form-section-title">
-                  <i className="fas fa-file-pdf" style={{ fontSize: "0.7rem", color: "#e9c176" }} />
+                  <i className="fas fa-file-pdf" aria-hidden="true" />
                   Nombre del archivo
                 </p>
                 <div className="cm-field">

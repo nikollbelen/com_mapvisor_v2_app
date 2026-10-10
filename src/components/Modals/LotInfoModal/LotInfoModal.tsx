@@ -13,10 +13,7 @@ import ContactModal from "../ContactModal/ContactModal";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import { useAuth } from "../../../contexts/AuthContext";
 import { getLotStatusBadgeStyle } from "../../../constants/lotStatusColors";
-import {
-  confirmGoogleAppsScriptDelete,
-  postToGoogleAppsScript,
-} from "../../../utils/googleAppsScript";
+import { mapvisorApi } from "../../../utils/mapvisorApi";
 
 interface LotInfoModalProps {
   isVisible?: boolean;
@@ -131,6 +128,26 @@ const parseLotMedia = (raw: unknown): LotMediaItem[] => {
     return [];
   }
 };
+
+const propertyTypeLabels: Record<string, string> = {
+  departamento: "Departamento",
+  casa: "Casa",
+  lote: "Lote",
+};
+
+const operationLabels: Record<string, string> = {
+  venta: "Venta",
+  alquiler: "Alquiler",
+};
+
+const formatLookupLabel = (value: unknown, labels: Record<string, string>) => {
+  if (typeof value !== "string") return "";
+  const normalized = value.trim().toLowerCase();
+  return labels[normalized] || value.trim();
+};
+
+const hasDisplayValue = (value: unknown) =>
+  value !== null && value !== undefined && String(value).trim() !== "";
 
 const parseNotesHtmlToSegments = (html: string): NoteSegment[] => {
   if (!html || !canUseDom) {
@@ -454,15 +471,27 @@ const LotInfoModal = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDeletingLot, setIsDeletingLot] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timer = window.setTimeout(() => setToastMessage(null), 3500);
+    return () => window.clearTimeout(timer);
+  }, [toastMessage]);
   
   // Estados para manejar el focus de inputs formateados
   const [focusedInputs, setFocusedInputs] = useState<{[key: string]: boolean}>({});
   // Datos por defecto si no hay datos del lote
   const defaultLotData = {
     lot: "Lote sin identificar",
+    propertyType: "",
+    operation: "",
     status: "Disponible",
     price: "$0.00",
     area: "0.00 m²",
+    city: "",
+    district: "",
+    bedrooms: "",
+    bathrooms: "",
     phase: "",
     id: undefined,
   };
@@ -472,6 +501,11 @@ const LotInfoModal = ({
   const lotData = loteData
     ? {
         lot: loteData.nombre || loteData.direccion || "Lote sin identificar",
+        propertyType: formatLookupLabel(
+          loteData.tipo_propiedad || loteData.tipoPropiedad,
+          propertyTypeLabels
+        ),
+        operation: formatLookupLabel(loteData.operacion, operationLabels),
         status: loteData.estado || "Disponible",
         price: loteData.precio
           ? (() => {
@@ -482,12 +516,17 @@ const LotInfoModal = ({
             })()
           : "$0.00",
         area: loteData.area || "0.00 m²",
+        city: loteData.ciudad || "",
+        district: loteData.distrito || "",
+        bedrooms: loteData.dormitorios ?? "",
+        bathrooms: loteData.banos ?? "",
         phase: loteData.phase || loteData.etapa || "",
         id: loteData.id,
         media: parseLotMedia(loteData.media || loteData.Media),
       }
     : defaultLotData;
   const lotMedia: LotMediaItem[] = (lotData as any).media || [];
+  const shouldShowRooms = lotData.propertyType !== "Lote";
   const normalizedLotStatus = (lotData.status || "").toLowerCase();
   const statusBadgeStyle = getLotStatusBadgeStyle(normalizedLotStatus);
   const statusDisplayMap: Record<string, string> = {
@@ -498,10 +537,16 @@ const LotInfoModal = ({
   };
   const statusLabel =
     statusDisplayMap[normalizedLotStatus] || (typeof lotData.status === "string" ? lotData.status : "Vendido");
+  const lotShareUrl = useMemo(() => {
+    if (!canUseDom || !lotData.id) return "";
+    const url = new URL(window.location.href);
+    url.searchParams.set("highlight", String(lotData.id));
+    return url.toString();
+  }, [lotData.id]);
 
   // Constantes para la API de cotizaciones
   const BASE_API = import.meta.env.VITE_API_BASE_URL;
-  const PROJECT_ID = import.meta.env.VITE_PROJECT_ID; // ID del proyecto NAUTIA CONDOMINOS
+  const PROJECT_ID = import.meta.env.VITE_PROJECT_ID; // ID del proyecto Tupu
   const LOT_ID = loteData?.id; // ID del lote actual desde la API
 
   const handleClose = () => {
@@ -524,51 +569,15 @@ const LotInfoModal = ({
 
   const handleConfirmDeleteLot = async () => {
     if (!loteData?.id || isDeletingLot) return;
-    const scriptUrl = import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL;
-    if (!scriptUrl) {
-      setToastMessage("Falta configurar VITE_GOOGLE_APPS_SCRIPT_URL.");
-      setShowDeleteConfirm(false);
-      return;
-    }
 
     setIsDeletingLot(true);
     try {
-      const resp = await fetch("/api/r2-delete-media", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          keys: lotMedia.map((item) => item.key).filter(Boolean),
-        }),
-      });
-      if (!resp.ok) {
-        console.warn("[LotInfoModal] No se pudo borrar multimedia en R2");
-      }
-
-      const payload = { action: "deleteLot", fid: loteData.id };
-      const sheetResp = await postToGoogleAppsScript(scriptUrl, payload);
-      let result: { ok?: boolean; error?: string } = {};
-      try {
-        result = await sheetResp.json();
-      } catch {
-        /* Google Apps Script redirect can return an empty response */
-      }
-      if (!sheetResp.ok || result.ok === false) {
-        const deleteWasPersisted = await confirmGoogleAppsScriptDelete(
-          scriptUrl,
-          loteData.id
-        );
-        if (!deleteWasPersisted) {
-          throw new Error(result.error || "No se pudo eliminar el lote");
-        }
-        console.warn(
-          "[LotInfoModal] Apps Script devolvió error al eliminar, pero el lote ya no existe en Google Sheets.",
-          result.error || sheetResp.status
-        );
-      }
+      await mapvisorApi(`/api/lots/${loteData.id}`, { method: "DELETE" });
 
       if (window.removeLotFromMap) {
         window.removeLotFromMap(loteData.id);
       }
+      window.dispatchEvent(new CustomEvent("userLotsChanged"));
       setShowDeleteConfirm(false);
       handleClose();
     } catch (error: any) {
@@ -1851,9 +1860,9 @@ const LotInfoModal = ({
     pdf.setFontSize(15);
     pdf.setTextColor(C.white);
     if (logoLoaded) {
-      pdf.text('Nautia Condominios', pageWidth - margin, headerH / 2 + 1.5, { align: 'right' });
+      pdf.text('Tupu', pageWidth - margin, headerH / 2 + 1.5, { align: 'right' });
     } else {
-      pdf.text('Nautia Condominios', pageWidth / 2, headerH / 2 + 1.5, { align: 'center' });
+      pdf.text('Tupu', pageWidth / 2, headerH / 2 + 1.5, { align: 'center' });
     }
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(8.5);
@@ -1889,7 +1898,12 @@ const LotInfoModal = ({
     const lotRows: Array<{ label: string; value: string }> = [
       { label: 'Lote',   value: String(lotData.lot   || '—') },
       { label: 'Etapa',  value: String(lotData.phase || '—') },
+      { label: 'Tipo',   value: String(lotData.propertyType || '—') },
+      { label: 'Operación', value: String(lotData.operation || '—') },
+      { label: 'Ubicación', value: [lotData.district, lotData.city].filter(Boolean).join(', ') || '—' },
       { label: 'Área',   value: String(lotData.area  || '—') },
+      { label: 'Dormitorios', value: shouldShowRooms && hasDisplayValue(lotData.bedrooms) ? String(lotData.bedrooms) : '—' },
+      { label: 'Baños', value: shouldShowRooms && hasDisplayValue(lotData.bathrooms) ? String(lotData.bathrooms) : '—' },
       { label: 'Precio', value: formatPrice(lotData.price)   },
     ];
     const clientRows: Array<{ label: string; value: string }> = [
@@ -2078,7 +2092,7 @@ const LotInfoModal = ({
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(7.5);
     pdf.setTextColor(C.goldLight);
-    pdf.text('Nautia Condominios — Documento generado digitalmente', margin, footerY + 8);
+    pdf.text('Tupu - Encuentra tu lugar — Documento generado digitalmente', margin, footerY + 8);
     pdf.setTextColor(C.white);
     pdf.text(new Date().toISOString().split('T')[0], pageWidth - margin, footerY + 8, { align: 'right' });
 
@@ -2460,6 +2474,32 @@ const LotInfoModal = ({
     setShowQuotation(false);
   };
 
+  const handleCopyLotLink = async () => {
+    if (!lotShareUrl) {
+      setToastMessage("No se pudo generar el link de este lote.");
+      return;
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(lotShareUrl);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = lotShareUrl;
+        textArea.setAttribute("readonly", "");
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+      setToastMessage("Link del lote copiado.");
+    } catch {
+      setToastMessage("No se pudo copiar el link. Inténtalo nuevamente.");
+    }
+  };
+
   const isLotAvailable = normalizedLotStatus === "disponible";
 
   /*
@@ -2512,7 +2552,7 @@ const LotInfoModal = ({
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Cotizacion de Lote - Nautia Condominios</title>
+  <title>Cotizacion de Lote - Tupu</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, Helvetica, sans-serif; color: #111827; background: #fff; font-size: 13px; line-height: 1.5; }
@@ -2565,7 +2605,7 @@ const LotInfoModal = ({
       <img src="/images/logo_mikonos.png" alt="Logo" onerror="this.style.display='none'" />
     </div>
     <div class="pdf-header-brand">
-      <div class="pdf-header-name">Nautia Condominios</div>
+      <div class="pdf-header-name">Tupu</div>
       <div class="pdf-header-sub">Condominio Residencial Playa</div>
     </div>
   </div>
@@ -2580,7 +2620,12 @@ const LotInfoModal = ({
         <div class="info-col-title">Informacion del Lote</div>
         <div class="info-row"><span class="info-label">Lote</span><span class="info-value">${lotData.lot || '-'}</span></div>
         <div class="info-row"><span class="info-label">Etapa</span><span class="info-value">${lotData.phase || '-'}</span></div>
+        <div class="info-row"><span class="info-label">Tipo</span><span class="info-value">${lotData.propertyType || '-'}</span></div>
+        <div class="info-row"><span class="info-label">Operacion</span><span class="info-value">${lotData.operation || '-'}</span></div>
+        <div class="info-row"><span class="info-label">Ubicacion</span><span class="info-value">${[lotData.district, lotData.city].filter(Boolean).join(', ') || '-'}</span></div>
         <div class="info-row"><span class="info-label">Area</span><span class="info-value">${lotData.area || '-'}</span></div>
+        <div class="info-row"><span class="info-label">Dormitorios</span><span class="info-value">${shouldShowRooms && hasDisplayValue(lotData.bedrooms) ? lotData.bedrooms : '-'}</span></div>
+        <div class="info-row"><span class="info-label">Banos</span><span class="info-value">${shouldShowRooms && hasDisplayValue(lotData.bathrooms) ? lotData.bathrooms : '-'}</span></div>
         <div class="info-row"><span class="info-label">Precio</span><span class="info-value">${formatPrice(lotData.price)}</span></div>
         <div class="info-row"><span class="info-label">Fecha cotizacion</span><span class="info-value">${new Date().toLocaleDateString()}</span></div>
       </div>
@@ -2636,7 +2681,7 @@ const LotInfoModal = ({
     </div>
   </div>
   <div class="pdf-footer">
-    <span>Nautia Condominios &mdash; Documento generado digitalmente</span>
+    <span>Tupu - Encuentra tu lugar &mdash; Documento generado digitalmente</span>
     <span>${new Date().toISOString().split('T')[0]}</span>
   </div>
 </body>
@@ -2883,16 +2928,42 @@ const LotInfoModal = ({
             </div>
 
             <div className="lot-property-details">
-              {lotData.phase && (
+              {lotData.propertyType && (
                 <div className="lot-detail-row">
-                  <span className="lot-detail-label">Etapa / Fase</span>
-                  <span className="lot-detail-value">{lotData.phase}</span>
+                  <span className="lot-detail-label">Tipo de propiedad</span>
+                  <span className="lot-detail-value">{lotData.propertyType}</span>
+                </div>
+              )}
+              {lotData.operation && (
+                <div className="lot-detail-row">
+                  <span className="lot-detail-label">Operación</span>
+                  <span className="lot-detail-value">{lotData.operation}</span>
+                </div>
+              )}
+              {(lotData.city || lotData.district) && (
+                <div className="lot-detail-row">
+                  <span className="lot-detail-label">Ubicación</span>
+                  <span className="lot-detail-value">
+                    {[lotData.district, lotData.city].filter(Boolean).join(", ")}
+                  </span>
                 </div>
               )}
               <div className="lot-detail-row">
                 <span className="lot-detail-label">Área del Lote</span>
                 <span className="lot-detail-value">{lotData.area}</span>
               </div>
+              {shouldShowRooms && hasDisplayValue(lotData.bedrooms) && (
+                <div className="lot-detail-row">
+                  <span className="lot-detail-label">Dormitorios</span>
+                  <span className="lot-detail-value">{lotData.bedrooms}</span>
+                </div>
+              )}
+              {shouldShowRooms && hasDisplayValue(lotData.bathrooms) && (
+                <div className="lot-detail-row">
+                  <span className="lot-detail-label">Baños</span>
+                  <span className="lot-detail-value">{lotData.bathrooms}</span>
+                </div>
+              )}
               <div className="lot-detail-row">
                 <span className="lot-detail-label">Precio de Lista</span>
                 <span className="lot-detail-value price">{lotData.price}</span>
@@ -2946,6 +3017,17 @@ const LotInfoModal = ({
               </button>
             </div>
 
+
+            <button
+              type="button"
+              className="lot-share-link-btn"
+              onClick={handleCopyLotLink}
+              disabled={!lotShareUrl}
+              title="Copiar link directo del lote"
+            >
+              <span className="material-symbols-outlined">link</span>
+              <span>Copiar link del lote</span>
+            </button>
 
             <div className="lot-buttons-container">
               {!user && (

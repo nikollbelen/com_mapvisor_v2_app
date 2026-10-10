@@ -1,0 +1,18 @@
+name = "mapvisor-api"
+main = "src/index.ts"
+compatibility_date = "2026-10-09"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "mapvisor-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "REPLACE_WITH_R2_BUCKET_NAME"
+
+[vars]
+APP_ORIGIN = "https://tupu-app.vercel.app"
+R2_PUBLIC_BASE_URL = "https://REPLACE_WITH_PUBLIC_R2_DOMAIN"
+SESSION_COOKIE_NAME = "mapvisor_session"

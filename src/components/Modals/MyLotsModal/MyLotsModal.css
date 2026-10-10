@@ -1,0 +1,241 @@
+.my-lots-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9999;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 100px 24px 24px;
+  background: transparent;
+  pointer-events: none;
+}
+
+.my-lots-modal {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100vh - 140px);
+  overflow: hidden;
+  position: relative;
+  border-radius: 24px;
+  background: rgba(30, 32, 32, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  border-top: 1px solid rgba(197, 160, 89, 0.4);
+  border-left: 1px solid rgba(197, 160, 89, 0.4);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  animation: myLotsFadeInUp 0.35s ease-out forwards;
+}
+
+@keyframes myLotsFadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.my-lots-modal-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  color: #e9c176;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.my-lots-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 28px 28px 20px;
+  border-bottom: 1px solid rgba(197, 160, 89, 0.12);
+}
+
+.my-lots-header-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: rgba(233, 193, 118, 0.12);
+  border: 1px solid rgba(233, 193, 118, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #e9c176;
+}
+
+.my-lots-title {
+  margin: 0;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.my-lots-subtitle {
+  margin: 4px 0 0;
+  font-family: 'Manrope', sans-serif;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 13px;
+}
+
+.my-lots-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 28px 28px;
+}
+
+.my-lots-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.my-lot-card {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.045);
+  padding: 14px;
+}
+
+.my-lot-card-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.my-lot-name {
+  min-width: 0;
+  color: #fff;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.my-lot-status {
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.status-disponible { background: rgba(72, 199, 142, 0.15); color: #48c78e; }
+.status-reservado { background: rgba(233, 193, 118, 0.15); color: #e9c176; }
+.status-negociacion { background: rgba(74, 170, 255, 0.15); color: #79bdff; }
+.status-vendido { background: rgba(255, 107, 107, 0.13); color: #ff8f8f; }
+
+.my-lot-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.my-lot-meta span,
+.my-lot-date {
+  color: rgba(255, 255, 255, 0.58);
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+}
+
+.my-lot-date {
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.my-lot-view-btn {
+  width: 100%;
+  min-height: 38px;
+  margin-top: 12px;
+  border: 1px solid rgba(233, 193, 118, 0.34);
+  border-radius: 10px;
+  background: rgba(233, 193, 118, 0.12);
+  color: #e9c176;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.my-lot-view-btn:hover {
+  background: rgba(233, 193, 118, 0.18);
+  border-color: rgba(233, 193, 118, 0.58);
+  transform: translateY(-1px);
+}
+
+.my-lot-view-btn .material-symbols-outlined {
+  font-size: 17px;
+}
+
+.my-lots-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 34px 12px;
+}
+
+.my-lots-empty .material-symbols-outlined {
+  color: #e9c176;
+  font-size: 42px;
+}
+
+.my-lots-empty h3 {
+  margin: 12px 0 6px;
+  color: #fff;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 18px;
+}
+
+.my-lots-empty p {
+  max-width: 280px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.52);
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (max-width: 1024px) {
+  .my-lots-modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: rgba(0, 0, 0, 0.52);
+    pointer-events: auto;
+  }
+
+  .my-lots-modal {
+    max-width: 100%;
+    max-height: min(90dvh, calc(100dvh - env(safe-area-inset-bottom, 0px)));
+    border-radius: 24px 24px 0 0;
+    background: rgba(12, 14, 14, 0.96);
+    backdrop-filter: blur(26px);
+    -webkit-backdrop-filter: blur(26px);
+  }
+}

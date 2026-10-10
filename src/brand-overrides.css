@@ -1,0 +1,573 @@
+/* Tupu brand layer: loaded last to reskin legacy visor components safely. */
+:root {
+  --tupu-primary: #2962ff;
+  --tupu-secondary: #8b5cf6;
+  --tupu-dark: #0b1230;
+  --tupu-muted: #94a3b8;
+  --tupu-gradient: linear-gradient(135deg, #2962ff 0%, #8b5cf6 100%);
+  --tupu-panel-bg:
+    radial-gradient(circle at 16% 0%, rgb(41 98 255 / 16%), transparent 34%),
+    radial-gradient(circle at 100% 16%, rgb(139 92 246 / 14%), transparent 36%),
+    linear-gradient(145deg, rgb(11 18 48 / 96%), rgb(15 23 42 / 94%));
+  --tupu-panel-soft-bg: rgb(255 255 255 / 6%);
+  --tupu-panel-soft-border: rgb(148 163 184 / 15%);
+  --tupu-accent-bg: rgb(41 98 255 / 13%);
+  --tupu-accent-border: rgb(41 98 255 / 34%);
+}
+
+.hud-glass-panel,
+.hud-panel-modal,
+.lot-info-modal,
+.lot-modal,
+.login-modal,
+.user-info-modal,
+.my-lots-modal,
+.contact-modal,
+.areas-modal,
+.entorno-modal,
+.confirm-dialog,
+.admin-ui-panel,
+.time-of-day-control,
+.add-lot-modal {
+  border-color: rgb(41 98 255 / 26%) !important;
+  border-top-color: rgb(139 92 246 / 40%) !important;
+  border-left-color: rgb(41 98 255 / 40%) !important;
+  box-shadow: 0 24px 60px rgb(11 18 48 / 50%), 0 0 42px rgb(41 98 255 / 10%) !important;
+}
+
+.hud-gold-gradient,
+.hud-gold-gradient-bg,
+.instructions-gradient-gold,
+.instructions-gold-gradient-bg,
+.background-btn,
+.btn-submit,
+.add-lot-btn-submit,
+.confirm-dialog-confirm,
+.mobile-menu-brochure,
+.mobile-menu-item-icon--user,
+.topbar-nav-btn--active,
+.cam-ctrl-btn--accent,
+.preset-btn.active,
+.contact-submit-btn,
+.user-info-logout,
+.lot-action-primary,
+.quote-button,
+.lot-modal-primary,
+.lot-search-btn,
+.filter-chip.active,
+.status-filter.active,
+.lot-search-apply,
+.entorno-action-btn,
+.areas-action-btn {
+  background: var(--tupu-gradient) !important;
+  color: #fff !important;
+  border-color: rgb(41 98 255 / 44%) !important;
+  box-shadow: 0 12px 28px rgb(41 98 255 / 26%) !important;
+}
+
+.text-gold,
+.font-label-caps.text-primary-container,
+.text-primary,
+.text-primary-container,
+.hud-panel-logo-icon,
+.login-logo-icon,
+.lot-modal-logo-icon,
+.add-lot-section-label,
+.add-lot-header-icon .material-symbols-outlined,
+.my-lots-empty-icon,
+.my-lots-title-icon,
+.user-info-icon,
+.lot-search-icon,
+.area-icon,
+.entorno-icon,
+.time-value,
+.time-label,
+.mobile-menu-item.active .mobile-menu-item-title,
+.mobile-menu-item-title--gold,
+.mobile-menu-item-icon--add-lot,
+.mobile-menu-close .material-symbols-outlined,
+.topbar-nav-btn--add-lot,
+.topbar-nav-btn:hover,
+.preset-btn.active,
+.forgot,
+.form-label {
+  color: var(--tupu-secondary) !important;
+}
+
+.hud-panel-subheading,
+.time-label,
+.slider-labels,
+.lot-search-muted,
+.modal-muted,
+.mobile-menu-item-subtitle {
+  color: var(--tupu-muted) !important;
+}
+
+.hud-panel-logo-container,
+.login-logo-container,
+.user-info-avatar,
+.add-lot-header-icon,
+.my-lots-header-icon,
+.lot-modal-logo-container,
+.mobile-menu-item-icon--add-lot,
+.instructions-card,
+.contact-agent-icon,
+.area-card-icon,
+.entorno-modal-icon {
+  background: rgb(41 98 255 / 12%) !important;
+  border-color: rgb(41 98 255 / 30%) !important;
+  box-shadow: 0 0 18px rgb(41 98 255 / 18%) !important;
+}
+
+.hud-panel-close,
+.hud-panel-minimize,
+.login-modal-close,
+.user-info-close,
+.my-lots-close,
+.lot-modal-close,
+.contact-modal-close,
+.add-lot-close,
+.confirm-dialog-close {
+  border-color: rgb(41 98 255 / 24%) !important;
+  color: var(--tupu-secondary) !important;
+}
+
+.hud-panel-close:hover,
+.hud-panel-minimize:hover,
+.login-modal-close:hover,
+.user-info-close:hover,
+.my-lots-close:hover,
+.lot-modal-close:hover,
+.contact-modal-close:hover,
+.add-lot-close:hover,
+.confirm-dialog-close:hover {
+  background: rgb(41 98 255 / 18%) !important;
+  border-color: rgb(139 92 246 / 50%) !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+.form-input:focus,
+.add-lot-input:focus,
+.add-lot-select:focus,
+.add-lot-textarea:focus,
+.contact-input:focus,
+.contact-select:focus,
+.contact-textarea:focus {
+  border-color: rgb(41 98 255 / 70%) !important;
+  box-shadow: 0 0 0 3px rgb(41 98 255 / 20%) !important;
+}
+
+.topbar-nav-btn,
+.mobile-menu-item,
+.hud-panel-modal,
+.login-modal,
+.add-lot-modal,
+.lot-info-modal,
+.my-lots-modal,
+.contact-modal {
+  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.24s ease, box-shadow 0.24s ease !important;
+}
+
+.topbar-nav-btn:hover,
+.mobile-menu-item:hover {
+  transform: translateY(-2px) !important;
+}
+
+/* Typography and icon scale pass */
+.hud-panel-heading,
+.lot-search-title-text,
+.login-title,
+.user-info-title,
+.my-lots-title,
+.lot-modal-title,
+.contact-modal-title,
+.add-lot-title {
+  font-size: clamp(1rem, 1.6vw, 1.25rem) !important;
+  line-height: 1.22 !important;
+  letter-spacing: 0 !important;
+}
+
+.hud-panel-subheading,
+.login-subtitle,
+.user-info-subtitle,
+.my-lots-subtitle,
+.lot-modal-subtitle,
+.contact-modal-subtitle,
+.add-lot-subtitle {
+  font-size: 0.78rem !important;
+  line-height: 1.45 !important;
+}
+
+.filter-label,
+.form-label,
+.add-lot-label,
+.lot-card-label,
+.results-count {
+  font-size: 0.68rem !important;
+  line-height: 1.2 !important;
+}
+
+.hud-panel-logo-container,
+.login-logo-container,
+.user-info-avatar,
+.add-lot-header-icon,
+.my-lots-header-icon,
+.lot-modal-logo-container {
+  width: 54px !important;
+  height: 54px !important;
+  border-radius: 16px !important;
+}
+
+.hud-panel-logo-icon,
+.login-logo-icon,
+.lot-modal-logo-icon,
+.add-lot-header-icon .material-symbols-outlined,
+.my-lots-header-icon .material-symbols-outlined {
+  font-size: 32px !important;
+}
+
+.lot-search-title .material-symbols-outlined {
+  font-size: 28px !important;
+}
+
+.mobile-menu-item-icon .material-symbols-outlined,
+.topbar-nav-btn .material-symbols-outlined {
+  font-size: 27px !important;
+}
+
+/* Unified Tupu modal surface: keep every visor modal on the same visual system. */
+.hud-glass-panel,
+.hud-panel-modal,
+.lot-info-modal,
+.lot-modal,
+.lot-modal-front,
+.lot-modal-quotation,
+.login-modal,
+.user-info-modal,
+.my-lots-modal,
+.contact-modal,
+.areas-modal,
+.entorno-modal,
+.confirm-dialog,
+.admin-ui-panel,
+.time-of-day-control,
+.add-lot-modal,
+.lot-search-modal {
+  background: var(--tupu-panel-bg) !important;
+  border-color: rgb(41 98 255 / 30%) !important;
+  border-top-color: rgb(139 92 246 / 44%) !important;
+  border-left-color: rgb(41 98 255 / 44%) !important;
+  box-shadow: 0 24px 64px rgb(2 6 23 / 54%), 0 0 0 1px rgb(255 255 255 / 5%) inset !important;
+}
+
+.lot-modal-front,
+.lot-modal-quotation {
+  background:
+    radial-gradient(circle at 50% 0%, rgb(41 98 255 / 10%), transparent 34%),
+    rgb(11 18 48 / 96%) !important;
+}
+
+.user-info-modal-overlay,
+.login-modal-overlay,
+.lot-modal-overlay.show,
+.my-lots-modal-overlay,
+.hud-panel-modal-overlay,
+.add-lot-overlay {
+  background: rgb(2 6 23 / 42%) !important;
+  backdrop-filter: blur(8px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(120%) !important;
+}
+
+.user-info-hero,
+.my-lots-header,
+.lot-identification,
+.hud-panel-modal-header,
+.contact-modal-header,
+.add-lot-header {
+  border-color: rgb(41 98 255 / 16%) !important;
+  background: linear-gradient(to bottom, rgb(41 98 255 / 9%), transparent) !important;
+}
+
+.user-info-avatar,
+.my-lots-header-icon,
+.lot-modal-logo-container,
+.quotation-header-icon,
+.hud-panel-logo-container,
+.contact-agent-icon,
+.area-card-icon,
+.entorno-modal-icon {
+  background: var(--tupu-accent-bg) !important;
+  border-color: var(--tupu-accent-border) !important;
+  color: var(--tupu-secondary) !important;
+  box-shadow: 0 16px 34px rgb(41 98 255 / 18%) !important;
+}
+
+.user-info-avatar .material-symbols-outlined,
+.my-lots-header-icon .material-symbols-outlined,
+.lot-modal-logo-icon,
+.quotation-header-icon .material-symbols-outlined,
+.lot-media-title,
+.lot-media-title .material-symbols-outlined,
+.lot-boundaries-title,
+.lot-boundary-icon,
+.lot-detail-value.price,
+.total-label,
+.total-value,
+.quotation-back-bottom-btn,
+.installment-preview .material-symbols-outlined,
+.installment-preview strong,
+.payment-method-card .material-symbols-outlined,
+.discount-preset-btn:hover,
+.discount-preset-btn.active,
+.generate-schedule-btn,
+.function-btn,
+.user-info-field-label,
+.my-lots-empty .material-symbols-outlined {
+  color: var(--tupu-secondary) !important;
+}
+
+.user-info-role-badge,
+.user-info-role-badge.admin,
+.lot-box,
+.quotation-summary-card.total,
+.installment-preview,
+.discount-preset-btn.active,
+.payment-method-card.active,
+.total-row,
+.generate-schedule-btn,
+.quotation-back-bottom-btn,
+.my-lot-view-btn {
+  background: rgb(41 98 255 / 11%) !important;
+  border-color: rgb(41 98 255 / 34%) !important;
+  color: #dbeafe !important;
+}
+
+.user-info-field,
+.my-lot-card,
+.lot-detail-row,
+.lot-boundaries-section,
+.lot-boundary-item,
+.quotation-summary-card,
+.quotation-details-section,
+.quotation-table-row,
+.payment-method-card,
+.discount-preset-btn,
+.schedule-table,
+.schedule-table th,
+.lot-media-item {
+  background: var(--tupu-panel-soft-bg) !important;
+  border-color: var(--tupu-panel-soft-border) !important;
+}
+
+.user-info-modal-close,
+.my-lots-modal-close,
+.lot-modal-close,
+.lot-modal-back-link,
+.lot-contact-btn,
+.lot-share-link-btn,
+.function-btn,
+.quotation-back-bottom-btn,
+.my-lot-view-btn {
+  border-color: rgb(41 98 255 / 28%) !important;
+  color: #c4b5fd !important;
+}
+
+.user-info-modal-close:hover,
+.my-lots-modal-close:hover,
+.lot-modal-close:hover,
+.lot-modal-back-link:hover,
+.lot-contact-btn:hover,
+.lot-share-link-btn:hover,
+.function-btn:hover:not(:disabled),
+.quotation-back-bottom-btn:hover,
+.my-lot-view-btn:hover {
+  background: rgb(41 98 255 / 16%) !important;
+  border-color: rgb(139 92 246 / 44%) !important;
+}
+
+.user-info-btn-primary,
+.lot-whatsapp-btn,
+.lot-search-apply,
+.contact-submit-btn,
+.generate-schedule-btn:hover {
+  background: var(--tupu-gradient) !important;
+  color: #fff !important;
+  box-shadow: 0 14px 28px rgb(41 98 255 / 26%) !important;
+}
+
+.lot-admin-btn,
+.lot-admin-btn:hover:not(:disabled) {
+  background: rgb(41 98 255 / 10%) !important;
+  border-color: rgb(41 98 255 / 28%) !important;
+  color: #c4b5fd !important;
+}
+
+.lot-modal-front::-webkit-scrollbar-thumb,
+.lot-modal-quotation::-webkit-scrollbar-thumb,
+.my-lots-content::-webkit-scrollbar-thumb,
+.lot-search-content::-webkit-scrollbar-thumb {
+  background: rgb(41 98 255 / 42%) !important;
+}
+
+@media (max-width: 1024px) {
+  .user-info-modal,
+  .my-lots-modal,
+  .lot-modal,
+  .hud-panel-modal,
+  .lot-search-modal,
+  .add-lot-modal {
+    background: var(--tupu-panel-bg) !important;
+  }
+}
+
+/* Match side-panel modals to the lot search panel and keep the map unobscured. */
+.my-lots-modal,
+.lot-modal {
+  width: 380px !important;
+  max-width: calc(100vw - 48px) !important;
+}
+
+.my-lots-modal-overlay,
+.lot-modal-overlay,
+.lot-modal-overlay.show {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+@media (max-width: 1024px) {
+  .my-lots-modal,
+  .lot-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .my-lots-modal-overlay,
+  .lot-modal-overlay,
+  .lot-modal-overlay.show {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* Quotation print/save modal and confirmation dialog. */
+.contact-modal-overlay {
+  background: rgb(2 6 23 / 46%) !important;
+  backdrop-filter: blur(8px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(120%) !important;
+}
+
+.contact-modal,
+.confirm-dialog-panel {
+  background: var(--tupu-panel-bg) !important;
+  border-color: rgb(41 98 255 / 30%) !important;
+  border-top-color: rgb(139 92 246 / 44%) !important;
+  border-left-color: rgb(41 98 255 / 44%) !important;
+  box-shadow: 0 24px 64px rgb(2 6 23 / 58%), 0 0 0 1px rgb(255 255 255 / 5%) inset !important;
+}
+
+.confirm-dialog-overlay {
+  background:
+    radial-gradient(circle at 50% 35%, rgb(41 98 255 / 14%), transparent 34%),
+    rgb(2 6 23 / 58%) !important;
+  backdrop-filter: blur(8px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(120%) !important;
+}
+
+.confirm-dialog-panel::before {
+  background: linear-gradient(90deg, transparent, rgb(139 92 246 / 90%), transparent) !important;
+}
+
+.contact-modal-divider,
+.form-section-title::after {
+  background: rgb(41 98 255 / 18%) !important;
+}
+
+.form-section-title,
+.form-section-title i,
+.contact-modal-close,
+.confirm-dialog-kicker,
+.confirm-dialog-icon,
+.confirm-dialog-btn.ghost,
+.input-suffix {
+  color: var(--tupu-secondary) !important;
+}
+
+.form-section-title i {
+  font-size: 0.72rem !important;
+}
+
+.contact-seller-badge,
+.input-suffix-wrap,
+.confirm-dialog-icon,
+.confirm-dialog-btn.ghost {
+  background: rgb(41 98 255 / 10%) !important;
+  border-color: rgb(41 98 255 / 28%) !important;
+}
+
+.contact-seller-badge .seller-icon,
+.contact-modal .btn-primary,
+.confirm-dialog-btn.primary:not(.danger) {
+  background: var(--tupu-gradient) !important;
+  color: #fff !important;
+  box-shadow: 0 12px 28px rgb(41 98 255 / 26%) !important;
+}
+
+.contact-modal .btn-secondary {
+  background: rgb(255 255 255 / 6%) !important;
+  border-color: rgb(148 163 184 / 16%) !important;
+  color: #cbd5e1 !important;
+}
+
+.contact-modal .btn-secondary:hover,
+.confirm-dialog-btn.ghost:not(:disabled):hover {
+  background: rgb(41 98 255 / 14%) !important;
+  border-color: rgb(139 92 246 / 38%) !important;
+  color: #fff !important;
+}
+
+.contact-modal .form-input {
+  background: rgb(255 255 255 / 6%) !important;
+  border-color: rgb(148 163 184 / 14%) !important;
+  color: #fff !important;
+}
+
+.contact-modal .form-input:focus,
+.input-suffix-wrap:focus-within {
+  background: rgb(41 98 255 / 8%) !important;
+  border-color: rgb(41 98 255 / 54%) !important;
+  box-shadow: 0 0 0 3px rgb(41 98 255 / 16%) !important;
+}
+
+.input-suffix {
+  background: rgb(41 98 255 / 12%) !important;
+  border-left-color: rgb(41 98 255 / 20%) !important;
+}
+
+.contact-modal select.form-input {
+  background-image:
+    linear-gradient(45deg, transparent 50%, #8b5cf6 50%),
+    linear-gradient(135deg, #8b5cf6 50%, transparent 50%) !important;
+  background-position:
+    calc(100% - 16px) 17px,
+    calc(100% - 11px) 17px !important;
+  background-size: 5px 5px, 5px 5px !important;
+  background-repeat: no-repeat !important;
+}
+
+.contact-modal select.form-input option {
+  background: #0b1230 !important;
+  color: #fff !important;
+}
+
+.contact-modal select.form-input option:checked {
+  background: #2962ff !important;
+  color: #fff !important;
+}
+
+.contact-modal::-webkit-scrollbar-thumb {
+  background: rgb(41 98 255 / 42%) !important;
+}
