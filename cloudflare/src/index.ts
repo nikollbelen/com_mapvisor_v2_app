@@ -48,6 +48,11 @@ const SESSION_DAYS = 30;
 const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
 };
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://com-tupu-app.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:4173",
+];
 
 function json(data: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(data), {
@@ -61,7 +66,13 @@ function json(data: unknown, init: ResponseInit = {}) {
 
 function corsHeaders(env: Env, request: Request) {
   const origin = request.headers.get("Origin") || "";
-  const allowedOrigin = origin && origin === env.APP_ORIGIN ? origin : env.APP_ORIGIN;
+  const configuredOrigins = (env.APP_ORIGIN || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const allowedOrigins = Array.from(new Set([...configuredOrigins, ...DEFAULT_ALLOWED_ORIGINS]));
+  const fallbackOrigin = configuredOrigins[0] || DEFAULT_ALLOWED_ORIGINS[0];
+  const allowedOrigin = origin && allowedOrigins.includes(origin) ? origin : fallbackOrigin;
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Credentials": "true",
