@@ -273,13 +273,17 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
           {/* Main Navigation Dock (TopAppBar) */}
           <header className="fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-container-padding px-container-padding py-2 hud-glass-panel hud-glass-glow-top rounded-full max-w-fit">
             {/* Logo */}
-            <div className="flex items-center gap-unit border-r border-outline-variant pr-container-padding">
+            <a
+              className="topbar-brand-home flex items-center gap-unit border-r border-outline-variant pr-container-padding"
+              href="/"
+              aria-label="Ir a la pagina principal"
+            >
               <img className="topbar-brand-logo" src="/marca/icono-slogan.png" alt="Tupu - Encuentra tu lugar" />
               <div className="flex flex-col">
                 <span className="topbar-brand-text">Tupu</span>
                 <span className="font-label-caps text-[10px] text-primary-container uppercase tracking-widest"></span>
               </div>
-            </div>
+            </a>
             {/* Navigation Buttons */}
             <nav className="flex items-center gap-element-gap">
               {onAddLot && (
@@ -355,9 +359,13 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
         <>
           {/* TopNavBar (from diseñoVertical/normal/code.html) */}
           <header className="fixed top-0 w-full z-[60] flex justify-between items-center px-6 py-4 bg-surface/60 dark:bg-surface-dim/60 backdrop-blur-xl border-b border-white/20 dark:border-outline/10 shadow-sm shadow-primary/5">
-              <div className="font-h3 text-h3 font-bold text-primary dark:text-primary-fixed-dim tracking-tight">
+              <a
+                className="mobile-brand-home font-h3 text-h3 font-bold text-primary dark:text-primary-fixed-dim tracking-tight"
+                href="/"
+                aria-label="Ir a la pagina principal"
+              >
               Tupu
-            </div>
+            </a>
             <button
               className="w-10 h-10 flex items-center justify-center rounded-xl hud-glass-panel hover:bg-white/10 transition-all duration-300"
               onClick={toggleMenu}
@@ -377,7 +385,13 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
       {isMobile && isMenuOpen && (
         <div className="mobile-menu-overlay" role="dialog" aria-modal="true" aria-label="Menú principal">
           <header className="mobile-menu-header">
-            <div className="font-h3 text-primary font-extrabold tracking-tight">Tupu</div>
+            <a
+              className="mobile-brand-home font-h3 text-primary font-extrabold tracking-tight"
+              href="/"
+              aria-label="Ir a la pagina principal"
+            >
+              Tupu
+            </a>
             <button
               type="button"
               className="mobile-menu-close"

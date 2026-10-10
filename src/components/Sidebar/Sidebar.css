@@ -1,4 +1,18 @@
 /* Topbar — botón activo (desktop) */
+.topbar-brand-home,
+.mobile-brand-home {
+  color: inherit;
+  text-decoration: none;
+}
+
+.topbar-brand-home {
+  cursor: pointer;
+}
+
+.topbar-brand-home:hover .topbar-brand-logo {
+  transform: scale(1.04);
+}
+
 .topbar-nav-btn {
   display: flex;
   flex-direction: column;
