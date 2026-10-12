@@ -58,6 +58,38 @@ npx wrangler deploy
 
 ## Endpoints
 
+- `POST /api/claims` (público; valida y guarda reclamos y quejas en D1)
+
+### Libro de Reclamaciones
+
+Aplicar `0002_claims.sql` antes de desplegar el Worker y el frontend con el formulario conectado:
+
+```bash
+npx wrangler d1 migrations apply mapvisor-db --remote
+npx wrangler deploy
+```
+
+Ejecutar estos comandos desde `cloudflare`. El frontend usa `VITE_MAPVISOR_API_URL`.
+Los envíos no requieren cuenta. D1 guarda los datos, código, fecha y estado de atención.
+Si falla el almacenamiento, no se muestra una confirmación de éxito. Los reintentos del mismo
+envío conservan su constancia. Los datos personales no tienen endpoint de consulta público.
+La constancia se descarga desde la pantalla; no se envían correos automáticamente.
+
+Para consultar y atender los registros, usar la consola D1 de Cloudflare (acceso de la cuenta
+administradora), tabla `claims`. Consultar pendientes, responder por el correo del proyecto
+y actualizar `status`, `response` y `responded_at`. No hay panel de atención en el frontend.
+
+```sql
+SELECT receipt_number, created_at, name, email, type, service, detail, consumer_request, status
+FROM claims WHERE status != 'resolved' ORDER BY created_at ASC;
+```
+
+Prueba local sin escribir en producción: `node scripts/test-claims.mjs`, desde la raíz.
+Los datos del titular y RUC se configuran en `src/config/publicSite.ts` y se muestran
+discretamente en la información legal, el Libro y su constancia. Antes del lanzamiento,
+verificar la dirección proporcionada.
+
+### Autenticación y lotes
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `POST /api/auth/logout`

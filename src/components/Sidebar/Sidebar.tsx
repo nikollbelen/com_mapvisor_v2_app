@@ -291,7 +291,7 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
                   type="button"
                   className="topbar-nav-btn topbar-nav-btn--add-lot"
                   onClick={handleAddLotClick}
-                  title="Agregar lote"
+                  title="Publicar un lote en el mapa"
                 >
                   <span
                     className="material-symbols-outlined mb-1"
@@ -299,7 +299,7 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
                   >
                     add_location_alt
                   </span>
-                  <span className="font-label-caps text-[9px] uppercase">Agregar lote</span>
+                  <span className="font-label-caps text-[9px] uppercase">Publicar lote</span>
                 </button>
               )}
               <button
@@ -416,8 +416,8 @@ const Sidebar = ({ onAddLot }: SidebarProps) => {
                     </span>
                   </div>
                   <div className="mobile-menu-item-text">
-                    <span className="mobile-menu-item-title">Agregar lote</span>
-                    <span className="mobile-menu-item-subtitle">NUEVO POLÍGONO</span>
+                    <span className="mobile-menu-item-title">Publicar lote</span>
+                    <span className="mobile-menu-item-subtitle">PROMOCIÓN DE LANZAMIENTO</span>
                   </div>
                 </button>
               )}

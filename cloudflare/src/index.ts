@@ -631,11 +631,69 @@ async function uploadMedia(request: Request, env: Env) {
   });
 }
 
+async function createClaim(request: Request, env: Env) {
+  // This public endpoint never exposes stored consumer data.
+  if (!request.headers.get("Content-Type")?.includes("application/json")) {
+    return json({ ok: false, error: "Se requiere JSON." }, { status: 415 });
+  }
+  const rawBody = await request.text();
+  if (new TextEncoder().encode(rawBody).byteLength > 30000) {
+    return json({ ok: false, error: "Formulario demasiado extenso." }, { status: 413 });
+  }
+  let body;
+  try { body = JSON.parse(rawBody); } catch {
+    return json({ ok: false, error: "JSON inválido." }, { status: 400 });
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return json({ ok: false, error: "Formulario inválido." }, { status: 400 });
+  }
+  const fields: Record<string, string> = {};
+  const limits: Record<string, number> = { name: 200, document: 30, email: 254, phone: 30, address: 500, service: 30, type: 10, detail: 5000, request: 5000 };
+  for (const [key, limit] of Object.entries(limits)) {
+    fields[key] = normalizeText(body[key]);
+    if (!fields[key] || fields[key].length > limit) {
+      return json({ ok: false, error: `Campo inválido: ${key}.` }, { status: 400 });
+    }
+  }
+  const guardian = normalizeText(body.guardian);
+  const submissionId = normalizeText(body.submissionId);
+  const amount = body.amount === "" || body.amount === undefined || body.amount === null ? null : optionalNumber(body.amount);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(submissionId)
+    || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email)
+    || !["reclamo", "queja"].includes(fields.type)
+    || !["publicacion", "busqueda", "otro"].includes(fields.service)
+    || guardian.length > 200
+    || (body.amount !== "" && body.amount !== undefined && body.amount !== null && (amount === null || amount < 0 || amount > 999999999))) {
+    return json({ ok: false, error: "Revisa los datos del formulario." }, { status: 400 });
+  }
+  const number = `TUPU-${crypto.randomUUID().toUpperCase()}`;
+  const createdAt = new Date().toISOString();
+  const payloadHash = await sha256Hex(JSON.stringify({ fields, guardian, amount }));
+  try {
+    // A retry after a lost response returns the same receipt, without duplicating the record.
+    await env.DB.prepare(`INSERT INTO claims
+      (id, receipt_number, payload_hash, name, document, email, phone, address, guardian, service, type, amount, detail, consumer_request, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`)
+      .bind(submissionId, number, payloadHash, fields.name, fields.document, fields.email.toLowerCase(), fields.phone,
+        fields.address, guardian || null, fields.service, fields.type, amount, fields.detail, fields.request, createdAt).run();
+    const claim = await env.DB.prepare("SELECT receipt_number AS number, created_at AS createdAt, payload_hash AS payloadHash FROM claims WHERE id = ?")
+      .bind(submissionId).first<{ number: string; createdAt: string; payloadHash: string }>();
+    if (!claim) throw new Error("Claim not persisted");
+    if (claim.payloadHash !== payloadHash) {
+      return json({ ok: false, error: "Este envío ya fue registrado con otros datos. Recarga la página para iniciar otro." }, { status: 409 });
+    }
+    return json({ ok: true, claim: { number: claim.number, createdAt: claim.createdAt } }, { status: 201, headers: { "Cache-Control": "no-store" } });
+  } catch {
+    return json({ ok: false, error: "No se pudo guardar el registro. Intenta nuevamente." }, { status: 503 });
+  }
+}
+
 async function route(request: Request, env: Env) {
   const url = new URL(request.url);
   const method = request.method;
 
   if (method === "OPTIONS") return new Response(null, { status: 204 });
+  if (method === "POST" && url.pathname === "/api/claims") return createClaim(request, env);
   if (method === "POST" && url.pathname === "/api/auth/register") return register(request, env);
   if (method === "POST" && url.pathname === "/api/auth/login") return login(request, env);
   if (method === "POST" && url.pathname === "/api/auth/logout") return logout(request, env);

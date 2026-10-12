@@ -142,7 +142,7 @@ const LoginModal = ({ isVisible, onClose, onAuthenticated }: LoginModalProps) =>
               </h1>
               <p className="login-subtitle">
                 {isRegisterMode
-                  ? 'Regístrate para agregar lotes y ver tus publicaciones'
+                  ? 'Regístrate para publicar y gestionar tus lotes en el mapa'
                   : 'Ingresa para gestionar tus lotes dentro del visor'}
               </p>
             </>

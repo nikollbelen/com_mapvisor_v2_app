@@ -777,10 +777,10 @@ const AddLotModal = ({
           </div>
           <div className="add-lot-header-text">
             <h2 className="add-lot-title">
-              {isEditMode ? "Editar lote" : "Agregar lote"}
+              {isEditMode ? "Editar lote" : "Publicar mi lote"}
             </h2>
             <p className="add-lot-subtitle">
-              {isEditMode ? "Actualiza datos y multimedia" : "Registra un nuevo lote en el mapa"}
+              {isEditMode ? "Actualiza datos y multimedia" : "Sin costo durante la promoción de lanzamiento, sin pagos ni renovaciones mensuales"}
             </p>
           </div>
           <button
@@ -1172,7 +1172,7 @@ const AddLotModal = ({
               ) : (
                 <>
                   <span className="material-symbols-outlined">add_location_alt</span>
-                  {isEditMode ? "Guardar cambios" : "Agregar lote"}
+                  {isEditMode ? "Guardar cambios" : "Publicar lote"}
                 </>
               )}
             </button>
