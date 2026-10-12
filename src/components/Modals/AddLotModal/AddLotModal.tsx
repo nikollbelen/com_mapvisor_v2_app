@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useAuth } from "../../../contexts/AuthContext";
+import { isLotOwner } from "../../../utils/lotPermissions";
 import { saveUserLot } from "../../../utils/userLots";
 import {
   MAPVISOR_API_BASE_URL,
@@ -566,6 +567,11 @@ const AddLotModal = ({
     setErrorMessage("");
 
     // Validaciones
+    if (isEditMode && !isLotOwner(user, initialLot)) {
+      setErrorMessage("Solo puedes editar los lotes que publicaste.");
+      setSubmitState("error");
+      return;
+    }
     if (!form.nombre.trim()) {
       setErrorMessage("El nombre del lote es obligatorio.");
       setSubmitState("error");

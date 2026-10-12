@@ -335,6 +335,7 @@ function buildLoteSelectedDetail(entity) {
   return {
     entity,
     nombre: getEntityProp(entity, "number") || "",
+    ownerId: getEntityProp(entity, "owner_user_id") || getEntityProp(entity, "ownerId") || "",
     direccion: getter(window.getDireccion, (e) => getEntityProp(e, "direccion")),
     tipo_propiedad:
       getEntityProp(entity, "tipo_propiedad") ||
@@ -899,6 +900,7 @@ function buildGeoJsonFromSheetLots(lots) {
       type: "Feature",
       properties: {
         fid,
+        ownerId: lot.owner_user_id || "",
         number: nombre,
         lote: loteNum,
         manzana,
@@ -1310,6 +1312,7 @@ function updateLotFromWebSocket(lotData) {
             new CustomEvent("loteUpdated", {
               detail: {
                 entity: entity,
+                ownerId: getEntityProp(entity, "owner_user_id") || getEntityProp(entity, "ownerId") || "",
                 direccion: window.getDireccion(entity),
                 area: window.getArea(entity),
                 precio: window.getPrecio(entity),
@@ -1431,6 +1434,7 @@ window.addLotToMap = function addLotToMap(feature) {
     const entity = lotesDataSource.entities.add({
       properties: new window.Cesium.PropertyBag({
         fid:     p.fid,
+        ownerId: p.owner_user_id || p.ownerId || "",
         number:  p.number,
         lote:    p.lote,
         manzana: p.manzana || "",

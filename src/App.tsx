@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { AuthProvider } from "./contexts/AuthContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { isLotOwner } from "./utils/lotPermissions";
 import { UiVisibilityProvider } from "./contexts/UiVisibilityContext";
 import SplashScreen from "./Layout/SplashScreen/SplashScreen";
 import Instructions from "./Layout/Instructions/Instructions";
@@ -23,6 +24,7 @@ import "./components/Modals/shared/HudPanelModal.css";
 import "./brand-overrides.css";
 
 function AppContent() {
+  const { user } = useAuth();
   // Inicializar WebSocket para recibir actualizaciones de lotes en tiempo real
   useWebSocket();
   
@@ -167,10 +169,11 @@ function AppContent() {
   };
 
   const handleOpenAddLotEditor = useCallback((event: CustomEvent) => {
+    if (!isLotOwner(user, event.detail)) return;
     setLotToEdit(event.detail);
     setShowLotInfoModal(false);
     setShowAddLotModal(true);
-  }, []);
+  }, [user]);
 
   const handleCloseVideoOverlay = () => {
     setShowVideoOverlay(false);

@@ -12,6 +12,7 @@ import "./LotInfoModal.css";
 import ContactModal from "../ContactModal/ContactModal";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import { useAuth } from "../../../contexts/AuthContext";
+import { isLotOwner } from "../../../utils/lotPermissions";
 import { getLotStatusBadgeStyle } from "../../../constants/lotStatusColors";
 import { mapvisorApi } from "../../../utils/mapvisorApi";
 
@@ -383,6 +384,7 @@ const LotInfoModal = ({
   loteData,
 }: LotInfoModalProps) => {
   const { user } = useAuth();
+  const canManageLot = isLotOwner(user, loteData);
   const [showQuotation, setShowQuotation] = useState(false);
   const [discountAmount, setDiscountAmount] = useState(0);
   const [discountPercentage, setDiscountPercentage] = useState(0);
@@ -559,16 +561,17 @@ const LotInfoModal = ({
   };
 
   const handleEditLot = () => {
+    if (!canManageLot) return;
     window.dispatchEvent(new CustomEvent("openAddLotEditor", { detail: loteData }));
   };
 
   const handleDeleteLot = () => {
-    if (!loteData?.id || isDeletingLot) return;
+    if (!canManageLot || !loteData?.id || isDeletingLot) return;
     setShowDeleteConfirm(true);
   };
 
   const handleConfirmDeleteLot = async () => {
-    if (!loteData?.id || isDeletingLot) return;
+    if (!canManageLot || !loteData?.id || isDeletingLot) return;
 
     setIsDeletingLot(true);
     try {
@@ -2999,7 +3002,7 @@ const LotInfoModal = ({
               </div>
             )}
 
-            <div className="lot-admin-actions">
+            {canManageLot && <div className="lot-admin-actions">
               <button type="button" className="lot-admin-btn" onClick={handleEditLot}>
                 <span className="material-symbols-outlined">edit</span>
                 <span>Editar lote</span>
@@ -3015,7 +3018,7 @@ const LotInfoModal = ({
                 </span>
                 <span>{isDeletingLot ? "Eliminando" : "Eliminar lote"}</span>
               </button>
-            </div>
+            </div>}
 
 
             <button
@@ -3411,7 +3414,7 @@ const LotInfoModal = ({
         </div>
       )}
       <ConfirmDialog
-        isOpen={showDeleteConfirm}
+        isOpen={showDeleteConfirm && canManageLot}
         title={`Eliminar ${lotData.lot}`}
         message="Esta acción retirará el lote del mapa y también intentará borrar su multimedia asociada. No se podrá deshacer desde esta pantalla."
         confirmLabel="Eliminar lote"
